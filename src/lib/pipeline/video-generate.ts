@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { shots } from "@/lib/db/schema";
 import { resolveVideoProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
+import { buildVideoPrompt } from "@/lib/ai/prompts/video-generate";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 
@@ -25,10 +26,18 @@ export async function handleVideoGenerate(task: Task) {
     .set({ status: "generating" })
     .where(eq(shots.id, payload.shotId));
 
+  const prompt = shot.motionScript
+    ? buildVideoPrompt({
+        sceneDescription: shot.prompt || "",
+        motionScript: shot.motionScript,
+        cameraDirection: shot.cameraDirection || "static",
+      })
+    : shot.prompt || "";
+
   const videoPath = await videoProvider.generateVideo({
     firstFrame: shot.firstFrame,
     lastFrame: shot.lastFrame,
-    prompt: shot.prompt || "",
+    prompt,
     duration: shot.duration ?? 10,
     ratio: payload.ratio,
   });

@@ -23,7 +23,6 @@ export async function handleFrameGenerate(task: Task) {
 
   if (!shot) throw new Error("Shot not found");
 
-  // Get character descriptions
   const projectCharacters = await db
     .select()
     .from(characters)
@@ -33,7 +32,6 @@ export async function handleFrameGenerate(task: Task) {
     .map((c) => `${c.name}: ${c.description}`)
     .join("\n");
 
-  // Find previous shot's last frame for continuity
   const [previousShot] = await db
     .select()
     .from(shots)
@@ -53,9 +51,10 @@ export async function handleFrameGenerate(task: Task) {
     .set({ status: "generating" })
     .where(eq(shots.id, payload.shotId));
 
-  // Generate first frame
+  // Generate first frame using startFrameDesc
   const firstFramePrompt = buildFirstFramePrompt({
-    shotPrompt: shot.prompt || "",
+    sceneDescription: shot.prompt || "",
+    startFrameDesc: shot.startFrameDesc || shot.prompt || "",
     characterDescriptions,
     previousLastFrame: previousShot?.lastFrame || undefined,
   });
@@ -66,17 +65,19 @@ export async function handleFrameGenerate(task: Task) {
       .filter(Boolean) as string[],
   });
 
-  // Generate last frame
+  // Generate last frame using endFrameDesc
   const lastFramePrompt = buildLastFramePrompt({
-    shotPrompt: shot.prompt || "",
+    sceneDescription: shot.prompt || "",
+    endFrameDesc: shot.endFrameDesc || shot.prompt || "",
     characterDescriptions,
     firstFramePath,
   });
+  const charRefImages = projectCharacters
+    .map((c) => c.referenceImage)
+    .filter(Boolean) as string[];
   const lastFramePath = await ai.generateImage(lastFramePrompt, {
     quality: "hd",
-    referenceImages: projectCharacters
-      .map((c) => c.referenceImage)
-      .filter(Boolean) as string[],
+    referenceImages: [firstFramePath, ...charRefImages],
   });
 
   await db
