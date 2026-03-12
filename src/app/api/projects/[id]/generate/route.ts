@@ -29,6 +29,7 @@ import {
   buildLastFramePrompt,
 } from "@/lib/ai/prompts/frame-generate";
 import { resolveImageProvider, resolveVideoProvider } from "@/lib/ai/provider-factory";
+import { buildVideoPrompt } from "@/lib/ai/prompts/video-generate";
 import { buildCharacterTurnaroundPrompt } from "@/lib/ai/prompts/character-image";
 import { assembleVideo } from "@/lib/video/ffmpeg";
 
@@ -503,7 +504,8 @@ async function handleBatchFrameGenerate(
       if (i === 0) {
         // First shot: generate first frame
         const firstPrompt = buildFirstFramePrompt({
-          shotPrompt: shot.prompt || "",
+          sceneDescription: shot.prompt || "",
+          startFrameDesc: shot.startFrameDesc || shot.prompt || "",
           characterDescriptions,
         });
         firstFramePath = await ai.generateImage(firstPrompt, {
@@ -518,7 +520,8 @@ async function handleBatchFrameGenerate(
 
       // Generate last frame for this shot
       const lastPrompt = buildLastFramePrompt({
-        shotPrompt: shot.prompt || "",
+        sceneDescription: shot.prompt || "",
+        endFrameDesc: shot.endFrameDesc || shot.prompt || "",
         characterDescriptions,
         firstFramePath,
       });
@@ -613,7 +616,8 @@ async function handleSingleFrameGenerate(
     await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shotId));
 
     const firstPrompt = buildFirstFramePrompt({
-      shotPrompt: shot.prompt || "",
+      sceneDescription: shot.prompt || "",
+      startFrameDesc: shot.startFrameDesc || shot.prompt || "",
       characterDescriptions,
       previousLastFrame: previousShot?.lastFrame || undefined,
     });
@@ -623,7 +627,8 @@ async function handleSingleFrameGenerate(
     });
 
     const lastPrompt = buildLastFramePrompt({
-      shotPrompt: shot.prompt || "",
+      sceneDescription: shot.prompt || "",
+      endFrameDesc: shot.endFrameDesc || shot.prompt || "",
       characterDescriptions,
       firstFramePath,
     });
@@ -674,10 +679,18 @@ async function handleSingleVideoGenerate(
 
     const ratio = (payload?.ratio as string) || "16:9";
 
+    const videoPrompt = shot.motionScript
+      ? buildVideoPrompt({
+          sceneDescription: shot.prompt || "",
+          motionScript: shot.motionScript,
+          cameraDirection: shot.cameraDirection || "static",
+        })
+      : shot.prompt || "";
+
     const videoPath = await videoProvider.generateVideo({
       firstFrame: shot.firstFrame,
       lastFrame: shot.lastFrame,
-      prompt: shot.prompt || "",
+      prompt: videoPrompt,
       duration: shot.duration ?? 10,
       ratio,
     });
@@ -731,10 +744,18 @@ async function handleBatchVideoGenerate(
   const results = await Promise.all(
     eligible.map(async (shot) => {
       try {
+        const videoPrompt = shot.motionScript
+          ? buildVideoPrompt({
+              sceneDescription: shot.prompt || "",
+              motionScript: shot.motionScript,
+              cameraDirection: shot.cameraDirection || "static",
+            })
+          : shot.prompt || "";
+
         const videoPath = await videoProvider.generateVideo({
           firstFrame: shot.firstFrame!,
           lastFrame: shot.lastFrame!,
-          prompt: shot.prompt || "",
+          prompt: videoPrompt,
           duration: shot.duration ?? 10,
           ratio,
         });
