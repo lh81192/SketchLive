@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
+import fs from "node:fs";
 import path from "node:path";
 
 type DrizzleDB = ReturnType<typeof drizzle<typeof schema>>;
@@ -19,6 +20,9 @@ function createDb(): DrizzleDB {
   const dbPath =
     process.env.DATABASE_URL?.replace("file:", "") || "./data/aicomic.db";
   const absolutePath = path.resolve(dbPath);
+
+  // Ensure the directory exists before opening the database
+  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
 
   const sqlite = globalForDb.sqlite ?? new Database(absolutePath);
   if (process.env.NODE_ENV !== "production") {
