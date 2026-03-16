@@ -73,11 +73,11 @@ generationMode: text('generation_mode').notNull().default('keyframe'),
 
 ### `single_reference_video` 处理流程
 
-payload 需包含：`{ shotId: string }`（与现有 `single_video_generate` 一致）
+payload 需包含：`{ shotId: string, ratio?: string }`（ratio 默认 `"16:9"`，与现有 `single_video_generate` 一致）
 
 ```
 1. 验证项目归属（userId）
-2. 根据 payload.shotId 查询镜头
+2. 根据 payload.shotId 查询镜头，从 shot.projectId 得到 projectId
 3. 查询项目下所有有 referenceImage 的角色 → charRefImages[]（角色是项目级的）
 4. 若 charRefImages 为空 → 返回 400（提示先生成角色参考图）
 5. 用 shot.prompt + 角色描述拼接视频 prompt
@@ -96,8 +96,9 @@ payload 需包含：`{ shotId: string }`（与现有 `single_video_generate` 一
 
 结构与现有 `batch_video_generate` 一致，串行处理，差异如下：
 
-- **资格过滤：** 取所有 `status != 'generating'` 的镜头（无帧要求）；已有 videoUrl 的镜头**跳过**（与 keyframe 模式 batch 行为一致）
-- **单镜头调用：** 复用 `single_reference_video` 的处理逻辑
+- **资格过滤：** 取所有 `status != 'generating'` 且无 `videoUrl` 的镜头（无帧要求）
+- **预标记：** 循环开始前批量将所有资格镜头标记为 `status: 'generating'`（与 keyframe batch 一致，UI 可即时显示全部进行中状态）
+- **单镜头调用：** 复用 `single_reference_video` 的处理逻辑（`projectId` 从 `shot.projectId` 取，无需 payload 传入）
 - **失败处理：** 单镜头失败时写 `status: 'failed'`，继续处理下一个（与现有 batch 一致）
 
 ### AI Provider 层
@@ -118,6 +119,7 @@ payload 需包含：`{ shotId: string }`（与现有 `single_video_generate` 一
 **`VideoGenerateParams` 类型变更（使用判别联合）：**
 
 ```ts
+// 注意：VideoGenerateParams 从 interface 改为 type（discriminated union 必须用 type）
 // 首尾帧模式：firstFrame/lastFrame 必须同时存在
 type KeyframeVideoParams = {
   firstFrame: string
@@ -137,7 +139,7 @@ export type VideoGenerateParams = (KeyframeVideoParams | ReferenceVideoParams) &
 }
 ```
 
-这样 TypeScript 在编译期保证两种模式不会混用，现有 keyframe 调用点无需修改（仍传 `firstFrame`/`lastFrame`），`KlingVideoProvider` 内部用 `'firstFrame' in params` 区分分支。`handleSingleVideoGenerate`、`handleBatchVideoGenerate` 及 `video-generate.ts` pipeline handler 的现有调用代码**不需要任何改动**。
+`VideoProvider` interface 的 `generateVideo(params: VideoGenerateParams)` 签名**不变**，`type` 替换 `interface` 对调用方透明。现有 keyframe 调用点无需修改，`KlingVideoProvider` 内部用 `'firstFrame' in params` 区分分支。`handleSingleVideoGenerate`、`handleBatchVideoGenerate` 及 `video-generate.ts` pipeline handler 的现有调用代码**不需要任何改动**。
 
 ---
 
@@ -207,7 +209,7 @@ export type VideoGenerateParams = (KeyframeVideoParams | ReferenceVideoParams) &
 | `src/lib/db/schema.ts` | 添加 `generationMode` 字段 |
 | `src/app/api/projects/[id]/route.ts` | PATCH 支持 `generationMode`，补全 TypeScript 类型定义 |
 | `src/app/api/projects/[id]/generate/route.ts` | 添加 `single_reference_video`、`batch_reference_video` handlers |
-| `src/lib/ai/types.ts` | `VideoGenerateParams` 添加 `charRefImages?`，`firstFrame`/`lastFrame` 改为可选 |
+| `src/lib/ai/types.ts` | `interface VideoGenerateParams` 改为 `type`（判别联合），见设计文档中的完整类型定义 |
 | `src/lib/ai/providers/kling-video.ts` | 添加 text2video 分支 + 轮询端点参数化 |
 | `src/lib/pipeline/reference-video.ts` | 新建，参考图模式 pipeline handler |
 | `src/stores/project-store.ts` | `Project` 接口添加 `generationMode` 字段 |
