@@ -107,14 +107,29 @@ export class SeedanceProvider implements VideoProvider {
     };
   }
 
-  // Reference mode: use a single initial image (char ref or previous shot's last frame)
-  private buildReferenceBody(params: VideoGenerateParams & { initialImage: string }): Record<string, unknown> {
+  // Reference mode: use initial image (prev lastFrame or first char ref) + Toonflow character refs
+  private buildReferenceBody(
+    params: VideoGenerateParams & { initialImage: string }
+  ): Record<string, unknown> {
+    const content: unknown[] = [
+      { type: "text", text: params.prompt },
+      // 图片1 = initial image (temporal chain anchor)
+      { type: "image_url", image_url: { url: toImageUrl(params.initialImage) } },
+    ];
+
+    // Toonflow pattern: inject character reference images as 图片2, 图片3, ...
+    if (params.characterRefs?.length) {
+      for (const ref of params.characterRefs) {
+        content.push({
+          type: "image_url",
+          image_url: { url: toImageUrl(ref.imagePath) },
+        });
+      }
+    }
+
     return {
       model: this.model,
-      content: [
-        { type: "text", text: params.prompt },
-        { type: "image_url", image_url: { url: toImageUrl(params.initialImage) } },
-      ],
+      content,
       duration: params.duration || 5,
       ratio: params.ratio || "16:9",
       return_last_frame: true,
