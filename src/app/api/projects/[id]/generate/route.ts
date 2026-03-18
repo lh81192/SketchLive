@@ -3,8 +3,8 @@ import { streamText } from "ai";
 import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
-import { projects, characters, shots, dialogues } from "@/lib/db/schema";
-import { eq, asc, and, lt, gt, desc } from "drizzle-orm";
+import { projects, characters, shots, dialogues, storyboardVersions } from "@/lib/db/schema";
+import { eq, asc, and, lt, gt, desc, max } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { ulid } from "ulid";
 import { enqueueTask } from "@/lib/task-queue";
@@ -460,11 +460,34 @@ async function handleShotSplitStream(
           cameraDirection?: string;
         }>;
 
+        // Create a new version record
+        const [maxVersionRow] = await db
+          .select({ maxNum: storyboardVersions.versionNum })
+          .from(storyboardVersions)
+          .where(eq(storyboardVersions.projectId, projectId))
+          .orderBy(desc(storyboardVersions.versionNum))
+          .limit(1);
+        const nextVersionNum = (maxVersionRow?.maxNum ?? 0) + 1;
+        const today = new Date();
+        const dateStr = today.getUTCFullYear().toString() +
+          String(today.getUTCMonth() + 1).padStart(2, "0") +
+          String(today.getUTCDate()).padStart(2, "0");
+        const versionLabel = `${dateStr}-V${nextVersionNum}`;
+        const versionId = ulid();
+        await db.insert(storyboardVersions).values({
+          id: versionId,
+          projectId,
+          label: versionLabel,
+          versionNum: nextVersionNum,
+          createdAt: new Date(),
+        });
+
         for (const shot of parsedShots) {
           const shotId = ulid();
           await db.insert(shots).values({
             id: shotId,
             projectId,
+            versionId,
             sequence: shot.sequence,
             prompt: shot.sceneDescription,
             startFrameDesc: shot.startFrame,
@@ -875,6 +898,8 @@ async function handleSingleVideoGenerate(
     const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
     const videoPrompt = buildVideoPrompt({
       videoScript,
+      motionScript: shot.motionScript ?? undefined,
+      characterDescriptions: characterDescriptions || undefined,
       cameraDirection: shot.cameraDirection || "static",
       startFrameDesc: shot.startFrameDesc ?? undefined,
       endFrameDesc: shot.endFrameDesc ?? undefined,
@@ -1259,6 +1284,8 @@ async function handleSingleReferenceVideo(
     const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
     const videoPrompt = buildVideoPrompt({
       videoScript,
+      motionScript: shot.motionScript ?? undefined,
+      characterDescriptions: characterDescriptions || undefined,
       cameraDirection: shot.cameraDirection || "static",
       startFrameDesc: shot.startFrameDesc ?? undefined,
       endFrameDesc: shot.endFrameDesc ?? undefined,
