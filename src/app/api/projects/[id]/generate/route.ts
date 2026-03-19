@@ -23,9 +23,10 @@ import {
   buildCharacterExtractPrompt,
 } from "@/lib/ai/prompts/character-extract";
 import {
-  SHOT_SPLIT_SYSTEM,
   buildShotSplitPrompt,
+  buildShotSplitSystem,
 } from "@/lib/ai/prompts/shot-split";
+import { getModelMaxDuration } from "@/lib/ai/model-limits";
 import {
   buildFirstFramePrompt,
   buildLastFramePrompt,
@@ -461,9 +462,10 @@ async function handleShotSplitStream(
 
   const model = createLanguageModel(modelConfig.text);
 
+  const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
   const result = streamText({
     model,
-    system: SHOT_SPLIT_SYSTEM,
+    system: buildShotSplitSystem(videoMaxDuration),
     prompt: buildShotSplitPrompt(project.script || "", characterDescriptions),
     temperature: 0.5,
     onFinish: async ({ text }) => {
@@ -714,7 +716,7 @@ async function handleBatchFrameGenerate(
           characterDescriptions,
         });
         firstFramePath = await ai.generateImage(firstPrompt, {
-          size: "1792x1024",
+          size: "2560x1440",
           quality: "hd",
           referenceImages: charRefImages,
         });
@@ -731,7 +733,7 @@ async function handleBatchFrameGenerate(
         firstFramePath,
       });
       const lastFramePath = await ai.generateImage(lastPrompt, {
-        size: "1792x1024",
+        size: "2560x1440",
         quality: "hd",
         referenceImages: [firstFramePath, ...charRefImages],
       });
@@ -954,13 +956,17 @@ async function handleSingleVideoGenerate(
 
     const ratio = (payload?.ratio as string) || "16:9";
 
+    const videoModelId = modelConfig?.video?.modelId;
+    const videoMaxDuration = getModelMaxDuration(videoModelId);
+    const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
+
     const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
     const videoPrompt = shot.videoPrompt || buildVideoPrompt({
       videoScript,
       cameraDirection: shot.cameraDirection || "static",
       startFrameDesc: shot.startFrameDesc ?? undefined,
       endFrameDesc: shot.endFrameDesc ?? undefined,
-      duration: shot.duration ?? 10,
+      duration: effectiveDuration,
       dialogues: dialogueList.length > 0 ? dialogueList : undefined,
     });
 
@@ -968,7 +974,7 @@ async function handleSingleVideoGenerate(
       firstFrame: shot.firstFrame,
       lastFrame: shot.lastFrame,
       prompt: videoPrompt,
-      duration: shot.duration ?? 10,
+      duration: effectiveDuration,
       ratio,
     });
 
@@ -1027,6 +1033,7 @@ async function handleBatchVideoGenerate(
 
   const videoProvider = resolveVideoProvider(modelConfig, versionedUploadDir);
   const ratio = (payload?.ratio as string) || "16:9";
+  const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
 
   // Mark all as generating
   await Promise.all(
@@ -1039,6 +1046,7 @@ async function handleBatchVideoGenerate(
   const results: Array<{ shotId: string; sequence: number; status: "ok" | "error"; videoUrl?: string; error?: string }> = [];
   for (const shot of eligible) {
     try {
+      const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
       const shotDialogues = await db
         .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
         .from(dialogues)
@@ -1055,7 +1063,7 @@ async function handleBatchVideoGenerate(
         cameraDirection: shot.cameraDirection || "static",
         startFrameDesc: shot.startFrameDesc ?? undefined,
         endFrameDesc: shot.endFrameDesc ?? undefined,
-        duration: shot.duration ?? 10,
+        duration: effectiveDuration,
         dialogues: dialogueList.length > 0 ? dialogueList : undefined,
       });
 
@@ -1063,7 +1071,7 @@ async function handleBatchVideoGenerate(
         firstFrame: shot.firstFrame!,
         lastFrame: shot.lastFrame!,
         prompt: videoPrompt,
-        duration: shot.duration ?? 10,
+        duration: effectiveDuration,
         ratio,
       });
 
@@ -1356,6 +1364,10 @@ async function handleSingleReferenceVideo(
     // Step 2: Generate video using scene frame as initial image
     const videoProvider = resolveVideoProvider(modelConfig, versionedUploadDir);
 
+    const videoModelId = modelConfig?.video?.modelId;
+    const videoMaxDuration = getModelMaxDuration(videoModelId);
+    const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
+
     // Step 2b: Use stored videoPrompt if available; otherwise generate from scene frame via vision AI
     let videoPrompt: string;
     if (shot.videoPrompt) {
@@ -1367,7 +1379,7 @@ async function handleSingleReferenceVideo(
         const promptRequest = buildRefVideoPromptRequest({
           motionScript: motionContext,
           cameraDirection: shot.cameraDirection || "static",
-          duration: shot.duration ?? 10,
+          duration: effectiveDuration,
           dialogues: dialogueList.length > 0 ? dialogueList : undefined,
         });
         const rawPrompt = await textProvider.generateText(promptRequest, {
@@ -1375,13 +1387,13 @@ async function handleSingleReferenceVideo(
           images: [sceneFramePath],
           temperature: 0.7,
         });
-        videoPrompt = `Duration: ${shot.duration ?? 10}s.\n\n${rawPrompt.trim()}`;
+        videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
       } catch (err) {
         console.warn("[SingleReferenceVideo] Vision prompt generation failed, falling back:", err);
         videoPrompt = buildReferenceVideoPrompt({
           videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
           cameraDirection: shot.cameraDirection || "static",
-          duration: shot.duration ?? 10,
+          duration: effectiveDuration,
           dialogues: dialogueList.length > 0 ? dialogueList : undefined,
         });
       }
@@ -1392,7 +1404,7 @@ async function handleSingleReferenceVideo(
     const result = await videoProvider.generateVideo({
       initialImage: sceneFramePath,
       prompt: videoPrompt,
-      duration: shot.duration ?? 10,
+      duration: effectiveDuration,
       ratio,
     });
 
@@ -1479,6 +1491,7 @@ async function handleBatchReferenceVideo(
   const videoProvider = resolveVideoProvider(modelConfig, versionedUploadDir);
   const textProvider = resolveAIProvider(modelConfig);
   const ratio = (payload?.ratio as string) || "16:9";
+  const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
 
   await Promise.all(
     eligible.map((shot) =>
@@ -1496,6 +1509,7 @@ async function handleBatchReferenceVideo(
 
   for (const shot of eligible) {
     try {
+      const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
       const shotDialogues = await db
         .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
         .from(dialogues)
@@ -1536,7 +1550,7 @@ async function handleBatchReferenceVideo(
           const promptRequest = buildRefVideoPromptRequest({
             motionScript: motionContext,
             cameraDirection: shot.cameraDirection || "static",
-            duration: shot.duration ?? 10,
+            duration: effectiveDuration,
             dialogues: dialogueList.length > 0 ? dialogueList : undefined,
           });
           const rawPrompt = await textProvider.generateText(promptRequest, {
@@ -1544,13 +1558,13 @@ async function handleBatchReferenceVideo(
             images: [sceneFramePath],
             temperature: 0.7,
           });
-          videoPrompt = `Duration: ${shot.duration ?? 10}s.\n\n${rawPrompt.trim()}`;
+          videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
         } catch (err) {
           console.warn("[BatchReferenceVideo] Vision prompt generation failed, falling back:", err);
           videoPrompt = buildReferenceVideoPrompt({
             videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
             cameraDirection: shot.cameraDirection || "static",
-            duration: shot.duration ?? 10,
+            duration: effectiveDuration,
             dialogues: dialogueList.length > 0 ? dialogueList : undefined,
           });
         }
@@ -1561,7 +1575,7 @@ async function handleBatchReferenceVideo(
       const result = await videoProvider.generateVideo({
         initialImage: sceneFramePath,
         prompt: videoPrompt,
-        duration: shot.duration ?? 10,
+        duration: effectiveDuration,
         ratio,
       });
 
@@ -1699,12 +1713,15 @@ async function handleSingleVideoPrompt(
   }));
 
   try {
+    const videoModelId = modelConfig?.video?.modelId;
+    const videoMaxDuration = getModelMaxDuration(videoModelId);
+    const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
     const textProvider = resolveAIProvider(modelConfig);
     const motionContext = shot.motionScript || shot.videoScript || shot.prompt || "";
     const promptRequest = buildRefVideoPromptRequest({
       motionScript: motionContext,
       cameraDirection: shot.cameraDirection || "static",
-      duration: shot.duration ?? 10,
+      duration: effectiveDuration,
       dialogues: dialogueList.length > 0 ? dialogueList : undefined,
     });
     const rawPrompt = await textProvider.generateText(promptRequest, {
@@ -1712,7 +1729,7 @@ async function handleSingleVideoPrompt(
       images: [frameForVision],
       temperature: 0.7,
     });
-    const videoPrompt = `Duration: ${shot.duration ?? 10}s.\n\n${rawPrompt.trim()}`;
+    const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
     await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shotId));
     return NextResponse.json({ shotId, videoPrompt, status: "ok" });
   } catch (err) {
@@ -1741,9 +1758,11 @@ async function handleBatchVideoPrompt(
 
   const textProvider = resolveAIProvider(modelConfig);
   const results: Array<{ shotId: string; status: string }> = [];
+  const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
 
   for (const shot of eligible) {
     try {
+      const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
       const frameForVision = shot.sceneRefFrame || shot.firstFrame || shot.lastFrame;
       const shotDialogues = await db
         .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
@@ -1759,7 +1778,7 @@ async function handleBatchVideoPrompt(
       const promptRequest = buildRefVideoPromptRequest({
         motionScript: motionContext,
         cameraDirection: shot.cameraDirection || "static",
-        duration: shot.duration ?? 10,
+        duration: effectiveDuration,
         dialogues: dialogueList.length > 0 ? dialogueList : undefined,
       });
       const rawPrompt = await textProvider.generateText(promptRequest, {
@@ -1767,7 +1786,7 @@ async function handleBatchVideoPrompt(
         images: [frameForVision!],
         temperature: 0.7,
       });
-      const videoPrompt = `Duration: ${shot.duration ?? 10}s.\n\n${rawPrompt.trim()}`;
+      const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
       await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
       results.push({ shotId: shot.id, status: "ok" });
     } catch (err) {
