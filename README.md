@@ -179,9 +179,9 @@ src/
 |:---:|:---:|
 | ![项目列表](images/demo/list.png) | ![剧本生成](images/demo/剧本生成.png) |
 
-| 角色解析 | 分镜 |
-|:---:|:---:|
-| ![角色解析](images/demo/角色解析.png) | ![分镜](images/demo/分镜.png) |
+| 角色解析 | 分镜 | 分镜看板
+|:---:|:---:|---:|
+| ![角色解析](images/demo/角色解析.png) | ![分镜](images/demo/分镜.png) | ![分镜看板](images/demo/分镜看板.png) |
 
 | 预览 | 模型配置 |
 |:---:|:---:|
