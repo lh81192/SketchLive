@@ -3,20 +3,14 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "next-intl";
 import { uploadUrl } from "@/lib/utils/upload-url";
 import { useModelStore } from "@/stores/model-store";
-import { InlineModelPicker } from "@/components/editor/model-selector";
 import { useModelGuard } from "@/hooks/use-model-guard";
-import { VideoRatioPicker } from "@/components/editor/video-ratio-picker";
 import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "sonner";
-import { buildVideoPrompt, buildReferenceVideoPrompt } from "@/lib/ai/prompts/video-generate";
 import {
   Loader2,
-  ChevronDown,
-  ChevronUp,
   ImageIcon,
   VideoIcon,
   MessageCircle,
@@ -25,6 +19,13 @@ import {
   Copy,
   Check,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  Circle,
+  XCircle,
+  FileText,
+  Clapperboard,
 } from "lucide-react";
 
 interface Dialogue {
@@ -52,24 +53,74 @@ interface ShotCardProps {
   status: string;
   dialogues: Dialogue[];
   onUpdate: () => void;
-  batchGeneratingFrames?: boolean;
-  batchGeneratingVideo?: boolean;
-  batchGeneratingVideoPrompts?: boolean;
-  characterDescriptions?: string;
   generationMode?: "keyframe" | "reference";
-  batchGeneratingReferenceVideo?: boolean;
-  batchGeneratingSceneFrames?: boolean;
-  batchSceneFramesOverwrite?: boolean;
-  activeStep?: 1 | 2 | 3 | 4;
+  videoRatio?: string;
+  isCompact?: boolean;
+  onOpenDrawer?: (id: string) => void;
 }
 
-const statusVariant: Record<string, "outline" | "success" | "warning" | "destructive"> = {
-  pending: "outline",
-  generating: "warning",
-  completed: "success",
-  failed: "destructive",
-};
+type StepState = "done" | "generating" | "error" | "idle";
 
+function StepIndicator({ state }: { state: StepState }) {
+  if (state === "done") return <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />;
+  if (state === "generating") return <Loader2 className="h-4 w-4 text-primary animate-spin flex-shrink-0" />;
+  if (state === "error") return <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />;
+  return <Circle className="h-4 w-4 text-[--text-muted] flex-shrink-0" />;
+}
+
+function StepRow({
+  label,
+  state,
+  children,
+  defaultOpen = false,
+  isNext = false,
+}: {
+  label: string;
+  state: StepState;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  isNext?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen || isNext);
+
+  useEffect(() => {
+    if (isNext) setOpen(true);
+  }, [isNext]);
+
+  return (
+    <div className={`rounded-xl border transition-colors ${
+      isNext
+        ? "border-primary/30 bg-primary/3"
+        : state === "done"
+          ? "border-emerald-100 bg-emerald-50/40"
+          : state === "error"
+            ? "border-destructive/20 bg-destructive/3"
+            : "border-[--border-subtle] bg-[--surface]/50"
+    }`}>
+      <button
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <StepIndicator state={state} />
+        <span className={`flex-1 text-[13px] font-medium ${
+          isNext ? "text-primary" : state === "done" ? "text-emerald-700" : "text-[--text-secondary]"
+        }`}>
+          {label}
+        </span>
+        {open ? (
+          <ChevronUp className="h-3.5 w-3.5 text-[--text-muted]" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 text-[--text-muted]" />
+        )}
+      </button>
+      {open && (
+        <div className="border-t border-[--border-subtle] px-3 pb-3 pt-2.5">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ShotCard({
   id,
@@ -90,54 +141,68 @@ export function ShotCard({
   status,
   dialogues,
   onUpdate,
-  batchGeneratingFrames,
-  batchGeneratingVideo,
-  batchGeneratingVideoPrompts,
-  characterDescriptions,
   generationMode = "keyframe",
-  batchGeneratingReferenceVideo,
-  batchGeneratingSceneFrames,
-  batchSceneFramesOverwrite,
-  activeStep = 2,
+  videoRatio = "16:9",
+  isCompact = false,
+  onOpenDrawer,
 }: ShotCardProps) {
   const t = useTranslations();
   const getModelConfig = useModelStore((s) => s.getModelConfig);
+
+  // Edit state
   const [editPrompt, setEditPrompt] = useState(prompt);
   const [editStartFrame, setEditStartFrame] = useState(startFrameDesc ?? "");
   const [editEndFrame, setEditEndFrame] = useState(endFrameDesc ?? "");
   const [editMotionScript, setEditMotionScript] = useState(motionScript ?? "");
   const [editVideoPrompt, setEditVideoPrompt] = useState(videoPrompt ?? "");
   const [editCameraDirection, setEditCameraDirection] = useState(cameraDirection ?? "static");
+  const [editDuration, setEditDuration] = useState(duration);
+
   useEffect(() => { setEditPrompt(prompt); }, [prompt]);
   useEffect(() => { setEditStartFrame(startFrameDesc ?? ""); }, [startFrameDesc]);
   useEffect(() => { setEditEndFrame(endFrameDesc ?? ""); }, [endFrameDesc]);
   useEffect(() => { setEditMotionScript(motionScript ?? ""); }, [motionScript]);
   useEffect(() => { setEditVideoPrompt(videoPrompt ?? ""); }, [videoPrompt]);
   useEffect(() => { setEditCameraDirection(cameraDirection ?? "static"); }, [cameraDirection]);
-  const [editDuration, setEditDuration] = useState(duration);
+  useEffect(() => { setEditDuration(duration); }, [duration]);
+
+  // Generation state
   const [generatingFrames, setGeneratingFrames] = useState(false);
   const [generatingSceneFrame, setGeneratingSceneFrame] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [rewritingText, setRewritingText] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+
+  // UI state
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const [videoRatio, setVideoRatio] = useState("16:9");
   const [copied, setCopied] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+
   const imageGuard = useModelGuard("image");
   const videoGuard = useModelGuard("video");
-  const isGeneratingFrames = generatingFrames || (!!batchGeneratingFrames && !firstFrame && !lastFrame);
-  const isGeneratingSceneFrame = generatingSceneFrame || (!!batchGeneratingSceneFrames && (batchSceneFramesOverwrite || !sceneRefFrame));
-  const isGeneratingVideo =
-    generatingVideo ||
-    (!!batchGeneratingVideo && !!firstFrame && !!lastFrame && !videoUrl) ||
-    (!!batchGeneratingReferenceVideo && generationMode === "reference" && !videoUrl);
+
+  // Derived state
+  const hasText = !!(prompt || startFrameDesc || motionScript);
   const hasFrame = !!(sceneRefFrame || firstFrame || lastFrame);
-  const isGeneratingPrompt = generatingPrompt || (!!batchGeneratingVideoPrompts && hasFrame);
-  const variant =
-    generationMode === "reference" && status === "completed"
-      ? "default"
-      : statusVariant[status] || "outline";
+  const hasFramePair = !!(firstFrame && lastFrame);
+  const hasVideoPrompt = !!videoPrompt;
+  const hasVideo = !!videoUrl;
+  const isGenerating = status === "generating";
+
+  // Step states
+  const textState: StepState = rewritingText ? "generating" : hasText ? "done" : "idle";
+  const frameState: StepState =
+    generatingFrames || generatingSceneFrame ? "generating"
+    : status === "failed" && !hasFrame ? "error"
+    : hasFrame ? "done" : "idle";
+  const promptState: StepState = generatingPrompt ? "generating" : hasVideoPrompt ? "done" : "idle";
+  const videoState: StepState =
+    generatingVideo || (isGenerating && !hasVideo) ? "generating"
+    : status === "failed" && !hasVideo ? "error"
+    : hasVideo ? "done" : "idle";
+
+  // Which step is "next"
+  const nextStep = !hasFrame ? "frame" : !hasVideoPrompt ? "prompt" : !hasVideo ? "video" : null;
 
   async function patchShot(fields: Record<string, unknown>) {
     await apiFetch(`/api/projects/${projectId}/shots/${id}`, {
@@ -145,11 +210,6 @@ export function ShotCard({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(fields),
     });
-  }
-
-  async function handleDurationChange(d: number) {
-    setEditDuration(d);
-    await patchShot({ duration: d });
   }
 
   async function handleGenerateFrames() {
@@ -167,51 +227,9 @@ export function ShotCard({
       });
       onUpdate();
     } catch (err) {
-      console.error("Frame generate error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
     setGeneratingFrames(false);
-  }
-
-  async function handleGenerateVideoPrompt() {
-    setGeneratingPrompt(true);
-    try {
-      await apiFetch(`/api/projects/${projectId}/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "single_video_prompt",
-          payload: { shotId: id },
-          modelConfig: getModelConfig(),
-        }),
-      });
-      onUpdate();
-    } catch (err) {
-      console.error("Video prompt generate error:", err);
-      toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
-    }
-    setGeneratingPrompt(false);
-  }
-
-  async function handleGenerateVideo() {
-    if (!videoGuard()) return;
-    setGeneratingVideo(true);
-    try {
-      await apiFetch(`/api/projects/${projectId}/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "single_video_generate",
-          payload: { shotId: id, ratio: videoRatio },
-          modelConfig: getModelConfig(),
-        }),
-      });
-      onUpdate();
-    } catch (err) {
-      console.error("Video generate error:", err);
-      toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
-    }
-    setGeneratingVideo(false);
   }
 
   async function handleGenerateSceneFrame() {
@@ -229,13 +247,31 @@ export function ShotCard({
       });
       onUpdate();
     } catch (err) {
-      console.error("Scene frame generate error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
     setGeneratingSceneFrame(false);
   }
 
-  async function handleGenerateReferenceVideo() {
+  async function handleGenerateVideoPrompt() {
+    setGeneratingPrompt(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "single_video_prompt",
+          payload: { shotId: id },
+          modelConfig: getModelConfig(),
+        }),
+      });
+      onUpdate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+    }
+    setGeneratingPrompt(false);
+  }
+
+  async function handleGenerateVideo() {
     if (!videoGuard()) return;
     setGeneratingVideo(true);
     try {
@@ -243,14 +279,13 @@ export function ShotCard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "single_reference_video",
+          action: generationMode === "reference" ? "single_reference_video" : "single_video_generate",
           payload: { shotId: id, ratio: videoRatio },
           modelConfig: getModelConfig(),
         }),
       });
       onUpdate();
     } catch (err) {
-      console.error("Reference video generate error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
     setGeneratingVideo(false);
@@ -275,91 +310,134 @@ export function ShotCard({
     setRewritingText(false);
   }
 
-  function handleCopyPrompt(e: React.MouseEvent) {
-    e.stopPropagation();
-    const resolvedVideoScript = videoScript || motionScript || prompt || "";
-    const dialogueList = dialogues.length > 0
-      ? dialogues.map((d) => ({ characterName: d.characterName, text: d.text }))
-      : undefined;
-    const videoPrompt = generationMode === "reference"
-      ? buildReferenceVideoPrompt({
-          videoScript: resolvedVideoScript,
-          cameraDirection,
-          duration: editDuration,
-          dialogues: dialogueList,
-        })
-      : buildVideoPrompt({
-          videoScript: resolvedVideoScript,
-          cameraDirection,
-          startFrameDesc: startFrameDesc ?? undefined,
-          endFrameDesc: endFrameDesc ?? undefined,
-          duration: editDuration,
-          dialogues: dialogueList,
-        });
-    navigator.clipboard.writeText(videoPrompt);
+  function handleCopyPrompt() {
+    const text = videoPrompt || `${videoScript || motionScript || prompt}\nCamera: ${cameraDirection}`;
+    navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
+  const frameAssets = generationMode === "reference"
+    ? [{ src: sceneRefFrame, label: t("shot.sceneRefFrame"), type: "image" as const }]
+    : [
+        { src: firstFrame, label: t("shot.firstFrame"), type: "image" as const },
+        { src: lastFrame, label: t("shot.lastFrame"), type: "image" as const },
+      ];
+
+  // Progress dots: how many steps done out of 4
+  const stepsDone = [hasText, hasFrame, hasVideoPrompt, hasVideo].filter(Boolean).length;
+
+  if (isCompact) {
+    return (
+      <div
+        className="flex items-center gap-3 rounded-xl border border-[--border-subtle] bg-white px-3 py-2 cursor-pointer hover:border-primary/30 hover:bg-primary/2 transition-colors"
+        onClick={() => onOpenDrawer?.(id)}
+      >
+        {/* Sequence */}
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/8 font-mono text-xs font-bold text-primary">
+          {sequence}
+        </div>
+        {/* Thumbnails */}
+        <div className="flex gap-1">
+          {(generationMode === "reference"
+            ? [sceneRefFrame, videoUrl]
+            : [firstFrame, lastFrame, videoUrl]
+          ).map((src, i) => {
+            const isVid = i === (generationMode === "reference" ? 1 : 2);
+            return (
+              <div key={i} className="h-8 w-11 flex-shrink-0 overflow-hidden rounded-md border border-[--border-subtle] bg-[--surface]">
+                {src ? (
+                  isVid
+                    ? <video className="h-full w-full object-cover" src={uploadUrl(src)} />
+                    : <img src={uploadUrl(src)} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    {isVid
+                      ? <VideoIcon className="h-3 w-3 text-[--text-muted]" />
+                      : <ImageIcon className="h-3 w-3 text-[--text-muted]" />
+                    }
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {/* Scene text */}
+        <p className="flex-1 truncate text-xs text-[--text-secondary]">{prompt}</p>
+        {/* Progress dots */}
+        <div className="flex items-center gap-1">
+          {[hasText, hasFrame, hasVideoPrompt, hasVideo].map((done, i) => (
+            <div key={i} className={`h-1.5 w-1.5 rounded-full ${done ? "bg-emerald-400" : "bg-[--border-subtle]"}`} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="group overflow-hidden rounded-2xl border border-[--border-subtle] bg-white transition-all duration-300 hover:border-[--border-hover]">
-      {/* Header strip */}
-      <div className="flex items-center gap-4 p-4">
-        {/* Sequence badge */}
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 font-mono text-sm font-bold text-primary">
+    <div className="overflow-hidden rounded-2xl border border-[--border-subtle] bg-white transition-colors hover:border-[--border-hover]">
+      {/* ── Header ── */}
+      <div className="flex items-center gap-3 px-4 py-3">
+        {/* Sequence */}
+        <div
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary/8 font-mono text-sm font-bold text-primary cursor-pointer hover:bg-primary/15 transition-colors"
+          onClick={() => onOpenDrawer?.(id)}
+          title="Open editor"
+        >
           {sequence}
         </div>
 
         {/* Media thumbnails */}
         <div className="flex gap-1.5">
           {(generationMode === "reference"
-            ? [
-                { src: sceneRefFrame, icon: ImageIcon, label: t("shot.sceneRefFrame"), type: "image" as const },
-                { src: videoUrl, icon: VideoIcon, label: "Video", type: "video" as const },
-              ]
-            : [
-                { src: firstFrame, icon: ImageIcon, label: t("shot.firstFrame"), type: "image" as const },
-                { src: lastFrame, icon: ImageIcon, label: t("shot.lastFrame"), type: "image" as const },
-                { src: videoUrl, icon: VideoIcon, label: "Video", type: "video" as const },
-              ]
-          ).map((item, i) => (
-            <div
-              key={i}
-              className={`h-14 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-[--border-subtle] ${item.src ? "cursor-pointer transition-opacity hover:opacity-80" : ""}`}
-              onClick={() => item.src && setPreviewSrc(uploadUrl(item.src))}
-            >
-              {item.src ? (
-                item.type === "video" ? (
-                  <video className="h-full w-full object-cover" src={uploadUrl(item.src)} />
+            ? [sceneRefFrame, videoUrl]
+            : [firstFrame, lastFrame, videoUrl]
+          ).map((src, i) => {
+            const isVideo = i === (generationMode === "reference" ? 1 : 2);
+            return (
+              <div
+                key={i}
+                className={`h-12 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-[--border-subtle] ${src ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
+                onClick={() => src && setPreviewSrc(uploadUrl(src))}
+              >
+                {src ? (
+                  isVideo ? (
+                    <video className="h-full w-full object-cover" src={uploadUrl(src)} />
+                  ) : (
+                    <img src={uploadUrl(src)} className="h-full w-full object-cover" />
+                  )
                 ) : (
-                  <img src={uploadUrl(item.src)} alt={item.label} className="h-full w-full object-cover" />
-                )
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-[--surface]">
-                  <item.icon className="h-4 w-4 text-[--text-muted]" />
-                </div>
-              )}
-            </div>
-          ))}
+                  <div className="flex h-full w-full items-center justify-center bg-[--surface]">
+                    {isVideo
+                      ? <VideoIcon className="h-3.5 w-3.5 text-[--text-muted]" />
+                      : <ImageIcon className="h-3.5 w-3.5 text-[--text-muted]" />
+                    }
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        {/* Info */}
+        {/* Scene summary + meta */}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm text-[--text-primary]">{prompt}</p>
-          <div className="mt-1.5 flex items-center gap-3">
+          <div className="mt-1 flex items-center gap-2">
+            {/* Duration */}
             <span className="flex items-center gap-1 text-xs text-[--text-muted]">
               <Clock className="h-3 w-3" />
               <input
                 type="number"
-                min={8}
+                min={5}
                 max={15}
                 value={editDuration}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => {
-                  const v = Math.min(15, Math.max(8, Number(e.target.value)));
-                  handleDurationChange(v);
+                  const v = Math.min(15, Math.max(5, Number(e.target.value)));
+                  setEditDuration(v);
+                  patchShot({ duration: v });
                 }}
-                className="w-10 rounded border border-[--border-subtle] bg-white px-1 py-0.5 text-center text-[11px] font-medium text-[--text-primary] outline-none focus:border-primary/50"
+                className="w-9 rounded border border-[--border-subtle] bg-white px-1 py-0.5 text-center text-[11px] font-medium text-[--text-primary] outline-none focus:border-primary/50"
               />
               <span className="text-[11px]">s</span>
             </span>
@@ -369,64 +447,17 @@ export function ShotCard({
                 {dialogues.length}
               </span>
             )}
+            {/* Pipeline progress dots */}
+            <div className="flex items-center gap-1 ml-1">
+              {[hasText, hasFrame, hasVideoPrompt, hasVideo].map((done, i) => (
+                <div key={i} className={`h-1.5 w-1.5 rounded-full ${done ? "bg-emerald-400" : "bg-[--border-subtle]"}`} />
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Actions + Status + expand */}
-        <div className="flex items-center gap-2">
-          {!expanded && (
-            <>
-              {/* Step 2: generate frame */}
-              {activeStep === 2 && generationMode !== "reference" && (
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={(e) => { e.stopPropagation(); handleGenerateFrames(); }}
-                  disabled={isGeneratingFrames || isGeneratingVideo}
-                >
-                  {isGeneratingFrames ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImageIcon className="h-3 w-3" />}
-                  {isGeneratingFrames ? t("common.generating") : t("project.generateFrames")}
-                </Button>
-              )}
-              {activeStep === 2 && generationMode === "reference" && (
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={(e) => { e.stopPropagation(); handleGenerateSceneFrame(); }}
-                  disabled={isGeneratingSceneFrame || isGeneratingVideo}
-                >
-                  {isGeneratingSceneFrame ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImageIcon className="h-3 w-3" />}
-                  {isGeneratingSceneFrame ? t("common.generating") : t("shot.sceneRefFrame")}
-                </Button>
-              )}
-              {/* Step 3: generate video prompt */}
-              {activeStep === 3 && hasFrame && (
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={(e) => { e.stopPropagation(); handleGenerateVideoPrompt(); }}
-                  disabled={isGeneratingPrompt}
-                >
-                  {isGeneratingPrompt ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                  {isGeneratingPrompt ? t("common.generating") : t("shot.generateVideoPrompt")}
-                </Button>
-              )}
-              {/* Step 4: generate video */}
-              {activeStep === 4 && (generationMode === "reference" || (firstFrame && lastFrame)) && (
-                <Button
-                  size="xs"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    generationMode === "reference" ? handleGenerateReferenceVideo() : handleGenerateVideo();
-                  }}
-                  disabled={isGeneratingFrames || isGeneratingVideo}
-                >
-                  {isGeneratingVideo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                  {isGeneratingVideo ? t("common.generating") : t("project.generateVideo")}
-                </Button>
-              )}
-            </>
-          )}
+        {/* Right actions */}
+        <div className="flex items-center gap-1.5">
           <button
             onClick={handleCopyPrompt}
             title={t("shot.copyPrompt")}
@@ -434,19 +465,229 @@ export function ShotCard({
           >
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
           </button>
-          <Badge variant={variant} className={status === "generating" ? "animate-status-pulse" : ""}>
-            {status}
-          </Badge>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[--text-muted] transition-all hover:bg-[--surface] hover:text-[--text-primary]"
-          >
-            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
         </div>
       </div>
 
-      {/* Image/Video preview lightbox */}
+      {/* ── Pipeline Steps ── */}
+      <div className="space-y-2 border-t border-[--border-subtle] px-4 pb-3 pt-3">
+
+        {/* Step 1: 文本 */}
+        <StepRow
+          label={t("shot.stepText")}
+          state={textState}
+          defaultOpen={false}
+        >
+          {/* Summary */}
+          {prompt && <p className="mb-2 text-xs text-[--text-secondary] line-clamp-2">{prompt}</p>}
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={handleRewriteText}
+            disabled={rewritingText}
+          >
+            {rewritingText ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            {rewritingText ? t("common.generating") : t("shot.rewriteText")}
+          </Button>
+        </StepRow>
+
+        {/* Step 2: 帧 */}
+        <StepRow
+          label={generationMode === "reference" ? t("shot.stepSceneFrame") : t("shot.stepFrames")}
+          state={frameState}
+          isNext={nextStep === "frame"}
+        >
+          {/* Frame thumbnails */}
+          {hasFrame && (
+            <div className="mb-2.5 flex gap-2">
+              {frameAssets.map((asset, i) => (
+                <div
+                  key={i}
+                  className={`h-16 overflow-hidden rounded-lg border border-[--border-subtle] ${asset.src ? "cursor-pointer hover:opacity-80 transition-opacity" : "flex items-center justify-center bg-[--surface]"}`}
+                  style={{ width: generationMode === "reference" ? "100%" : "50%" }}
+                  onClick={() => asset.src && setPreviewSrc(uploadUrl(asset.src))}
+                >
+                  {asset.src
+                    ? <img src={uploadUrl(asset.src)} className="h-full w-full object-cover" />
+                    : <ImageIcon className="h-4 w-4 text-[--text-muted]" />
+                  }
+                </div>
+              ))}
+            </div>
+          )}
+          <Button
+            size="xs"
+            variant={nextStep === "frame" ? "default" : "outline"}
+            onClick={generationMode === "reference" ? handleGenerateSceneFrame : handleGenerateFrames}
+            disabled={generatingFrames || generatingSceneFrame || generatingVideo}
+          >
+            {(generatingFrames || generatingSceneFrame)
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <ImageIcon className="h-3 w-3" />
+            }
+            {(generatingFrames || generatingSceneFrame)
+              ? t("common.generating")
+              : hasFrame ? t("shot.regenerateFrames") : t("project.generateFrames")
+            }
+          </Button>
+        </StepRow>
+
+        {/* Step 3: 视频提示词 */}
+        <StepRow
+          label={t("shot.stepVideoPrompt")}
+          state={promptState}
+          isNext={nextStep === "prompt"}
+        >
+          {hasVideoPrompt && (
+            <p className="mb-2 text-xs text-[--text-secondary] line-clamp-3 font-mono leading-relaxed">
+              {videoPrompt}
+            </p>
+          )}
+          <Button
+            size="xs"
+            variant={nextStep === "prompt" ? "default" : "outline"}
+            onClick={handleGenerateVideoPrompt}
+            disabled={generatingPrompt || !hasFrame}
+          >
+            {generatingPrompt ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            {generatingPrompt
+              ? t("common.generating")
+              : hasVideoPrompt ? t("shot.regeneratePrompt") : t("shot.generateVideoPrompt")
+            }
+          </Button>
+        </StepRow>
+
+        {/* Step 4: 视频 */}
+        <StepRow
+          label={t("shot.stepVideo")}
+          state={videoState}
+          isNext={nextStep === "video"}
+        >
+          {hasVideo && (
+            <div
+              className="mb-2.5 w-full overflow-hidden rounded-lg border border-[--border-subtle] cursor-pointer"
+              onClick={() => setPreviewSrc(uploadUrl(videoUrl!))}
+            >
+              <video className="w-full max-h-32 object-cover" src={uploadUrl(videoUrl!)} />
+            </div>
+          )}
+          <Button
+            size="xs"
+            variant={nextStep === "video" ? "default" : "outline"}
+            onClick={handleGenerateVideo}
+            disabled={generatingVideo || isGenerating || (generationMode === "keyframe" && !hasFramePair)}
+          >
+            {(generatingVideo || (isGenerating && !hasVideo))
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <VideoIcon className="h-3 w-3" />
+            }
+            {(generatingVideo || (isGenerating && !hasVideo))
+              ? t("common.generating")
+              : hasVideo ? t("shot.regenerateVideo") : t("project.generateVideo")
+            }
+          </Button>
+        </StepRow>
+
+        {/* Collapsible edit section */}
+        <div className="pt-1">
+          <button
+            className="flex w-full items-center gap-1.5 text-[11px] text-[--text-muted] hover:text-[--text-secondary] transition-colors"
+            onClick={() => setEditOpen((o) => !o)}
+          >
+            <FileText className="h-3 w-3" />
+            {t("shot.editDetails")}
+            {editOpen ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+          </button>
+
+          {editOpen && (
+            <div className="mt-2 space-y-3">
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[--text-muted]">{t("shot.sceneDescription")}</p>
+                <Textarea
+                  value={editPrompt}
+                  onChange={(e) => setEditPrompt(e.target.value)}
+                  onBlur={() => patchShot({ prompt: editPrompt })}
+                  rows={2}
+                  placeholder={t("shot.prompt")}
+                />
+              </div>
+
+              {generationMode !== "reference" && (
+                <>
+                  <div className="rounded-xl bg-blue-50/50 p-3">
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-600">{t("shot.startFrame")}</p>
+                    <Textarea
+                      value={editStartFrame}
+                      onChange={(e) => setEditStartFrame(e.target.value)}
+                      onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
+                      rows={2}
+                      className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
+                    />
+                  </div>
+                  <div className="rounded-xl bg-amber-50/50 p-3">
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-600">{t("shot.endFrame")}</p>
+                    <Textarea
+                      value={editEndFrame}
+                      onChange={(e) => setEditEndFrame(e.target.value)}
+                      onBlur={() => patchShot({ endFrameDesc: editEndFrame })}
+                      rows={2}
+                      className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="rounded-xl bg-emerald-50/50 p-3">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-600">{t("shot.motionScript")}</p>
+                <Textarea
+                  value={editMotionScript}
+                  onChange={(e) => setEditMotionScript(e.target.value)}
+                  onBlur={() => patchShot({ motionScript: editMotionScript })}
+                  rows={2}
+                  className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
+                />
+              </div>
+
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[--text-muted]">{t("shot.cameraDirection")}</p>
+                <input
+                  value={editCameraDirection}
+                  onChange={(e) => setEditCameraDirection(e.target.value)}
+                  onBlur={() => patchShot({ cameraDirection: editCameraDirection })}
+                  className="w-full rounded-xl border border-[--border-subtle] bg-white px-3 py-2 text-sm outline-none focus:border-primary/50"
+                  placeholder="static / pan-left / zoom-in ..."
+                />
+              </div>
+
+              {dialogues.length > 0 && (
+                <div className="space-y-1.5 rounded-xl bg-[--surface] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[--text-muted]">{t("shot.dialogue")}</p>
+                  {dialogues.map((d) => (
+                    <p key={d.id} className="text-sm">
+                      <span className="font-semibold text-primary">{d.characterName}</span>
+                      <span className="mx-1.5 text-[--text-muted]">&mdash;</span>
+                      <span className="text-[--text-secondary]">{d.text}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {hasVideoPrompt && (
+                <div className="rounded-xl bg-purple-50/60 p-3">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-purple-600">{t("shot.videoPrompt")}</p>
+                  <Textarea
+                    value={editVideoPrompt}
+                    onChange={(e) => setEditVideoPrompt(e.target.value)}
+                    onBlur={() => patchShot({ videoPrompt: editVideoPrompt })}
+                    className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0 min-h-[6rem] max-h-48 resize-none overflow-y-auto"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Preview lightbox */}
       {previewSrc && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
@@ -454,233 +695,16 @@ export function ShotCard({
         >
           <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
             {previewSrc.match(/\.(mp4|webm|mov)/) ? (
-              <video
-                src={previewSrc}
-                controls
-                autoPlay
-                className="max-h-[85vh] rounded-xl"
-              />
+              <video src={previewSrc} controls autoPlay className="max-h-[85vh] rounded-xl" />
             ) : (
-              <img
-                src={previewSrc}
-                alt="Preview"
-                className="max-h-[85vh] rounded-xl"
-              />
+              <img src={previewSrc} alt="Preview" className="max-h-[85vh] rounded-xl" />
             )}
             <button
               onClick={() => setPreviewSrc(null)}
-              className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-sm font-bold text-[--text-primary] shadow-lg transition-transform hover:scale-110"
+              className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-sm font-bold shadow-lg hover:scale-110 transition-transform"
             >
               &times;
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Expanded detail */}
-      {expanded && (
-        <div className="space-y-4 border-t border-[--border-subtle] p-4">
-          {/* Scene Description */}
-          <div>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[--text-muted]">
-              {t("shot.sceneDescription")}
-            </p>
-            <Textarea
-              value={editPrompt}
-              onChange={(e) => setEditPrompt(e.target.value)}
-              onBlur={() => patchShot({ prompt: editPrompt })}
-              rows={2}
-              placeholder={t("shot.prompt")}
-            />
-          </div>
-
-          {/* Start / End Frame Descriptions — keyframe mode only */}
-          {generationMode !== "reference" && (
-            <>
-              <div className="rounded-xl bg-blue-50/50 p-3">
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-blue-600">
-                  {t("shot.startFrame")}
-                </p>
-                <Textarea
-                  value={editStartFrame}
-                  onChange={(e) => setEditStartFrame(e.target.value)}
-                  onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
-                  rows={2}
-                  className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
-                  placeholder="Start frame description..."
-                />
-              </div>
-
-              <div className="rounded-xl bg-amber-50/50 p-3">
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-600">
-                  {t("shot.endFrame")}
-                </p>
-                <Textarea
-                  value={editEndFrame}
-                  onChange={(e) => setEditEndFrame(e.target.value)}
-                  onBlur={() => patchShot({ endFrameDesc: editEndFrame })}
-                  rows={2}
-                  className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
-                  placeholder="End frame description..."
-                />
-              </div>
-            </>
-          )}
-
-          {/* Motion Script */}
-          <div className="rounded-xl bg-emerald-50/50 p-3">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600">
-              {t("shot.motionScript")}
-            </p>
-            <Textarea
-              value={editMotionScript}
-              onChange={(e) => setEditMotionScript(e.target.value)}
-              onBlur={() => patchShot({ motionScript: editMotionScript })}
-              rows={2}
-              className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
-              placeholder="Motion script..."
-            />
-          </div>
-
-          {/* Camera Direction */}
-          <div>
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[--text-muted]">
-              {t("shot.cameraDirection") || "Camera Direction"}
-            </p>
-            <input
-              value={editCameraDirection}
-              onChange={(e) => setEditCameraDirection(e.target.value)}
-              onBlur={() => patchShot({ cameraDirection: editCameraDirection })}
-              className="w-full rounded-xl border border-[--border-subtle] bg-white px-3.5 py-2 text-sm text-[--text-primary] outline-none focus:border-primary/50"
-              placeholder="static / pan-left / zoom-in ..."
-            />
-          </div>
-
-          {dialogues.length > 0 && (
-            <div className="space-y-2 rounded-xl bg-[--surface] p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[--text-muted]">
-                {t("shot.dialogue")}
-              </p>
-              {dialogues.map((d) => (
-                <p key={d.id} className="text-sm leading-relaxed">
-                  <span className="font-semibold text-primary">{d.characterName}</span>
-                  <span className="mx-1.5 text-[--text-muted]">&mdash;</span>
-                  <span className="text-[--text-secondary]">{d.text}</span>
-                </p>
-              ))}
-            </div>
-          )}
-
-          {/* Video Prompt display */}
-          {(videoPrompt || editVideoPrompt) && (
-            <div className="rounded-xl bg-purple-50/60 p-3">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-purple-600">
-                {t("shot.videoPrompt")}
-              </p>
-              <Textarea
-                value={editVideoPrompt}
-                onChange={(e) => setEditVideoPrompt(e.target.value)}
-                onBlur={() => patchShot({ videoPrompt: editVideoPrompt })}
-                className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0 [field-sizing:fixed] min-h-[8rem] max-h-64 overflow-y-auto resize-none"
-              />
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Step 1: rewrite text — always visible */}
-            <InlineModelPicker capability="text" />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleRewriteText}
-              disabled={rewritingText || isGeneratingFrames || isGeneratingVideo}
-            >
-              {rewritingText ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              {rewritingText ? t("common.generating") : t("shot.rewriteText")}
-            </Button>
-
-            {/* Step 2: generate frame */}
-            {activeStep === 2 && (
-              generationMode === "reference" ? (
-                <>
-                  <div className="h-4 w-px bg-[--border-subtle]" />
-                  <InlineModelPicker capability="image" />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleGenerateSceneFrame}
-                    disabled={isGeneratingSceneFrame || isGeneratingVideo || rewritingText}
-                  >
-                    {isGeneratingSceneFrame ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                    {isGeneratingSceneFrame ? t("common.generating") : t("shot.sceneRefFrame")}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="h-4 w-px bg-[--border-subtle]" />
-                  <InlineModelPicker capability="image" />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleGenerateFrames}
-                    disabled={isGeneratingFrames || isGeneratingVideo || rewritingText}
-                  >
-                    {isGeneratingFrames ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                    {isGeneratingFrames ? t("common.generating") : t("project.generateFrames")}
-                  </Button>
-                </>
-              )
-            )}
-
-            {/* Step 3: generate video prompt */}
-            {activeStep === 3 && hasFrame && (
-              <>
-                <div className="h-4 w-px bg-[--border-subtle]" />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleGenerateVideoPrompt}
-                  disabled={isGeneratingPrompt || isGeneratingVideo || rewritingText}
-                >
-                  {isGeneratingPrompt ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  {isGeneratingPrompt ? t("common.generating") : t("shot.generateVideoPrompt")}
-                </Button>
-              </>
-            )}
-
-            {/* Step 4: generate video */}
-            {activeStep === 4 && (generationMode === "reference" || (firstFrame && lastFrame)) && (
-              <>
-                <div className="h-4 w-px bg-[--border-subtle]" />
-                <InlineModelPicker capability="video" />
-                <VideoRatioPicker value={videoRatio} onChange={setVideoRatio} />
-                {generationMode !== "reference" && (
-                  <div className="flex items-center gap-1.5 rounded-lg border border-[--border-subtle] bg-white px-2.5 py-1">
-                    <Clock className="h-3.5 w-3.5 text-[--text-muted]" />
-                    <input
-                      type="number"
-                      min={8}
-                      max={15}
-                      value={editDuration}
-                      onChange={(e) => {
-                        const v = Math.min(15, Math.max(8, Number(e.target.value)));
-                        handleDurationChange(v);
-                      }}
-                      className="w-10 bg-transparent text-center text-[11px] font-medium text-[--text-primary] outline-none"
-                    />
-                    <span className="text-[11px] text-[--text-muted]">s</span>
-                  </div>
-                )}
-                <Button
-                  size="sm"
-                  onClick={generationMode === "reference" ? handleGenerateReferenceVideo : handleGenerateVideo}
-                  disabled={isGeneratingFrames || isGeneratingVideo}
-                >
-                  {isGeneratingVideo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  {isGeneratingVideo ? t("common.generating") : t("project.generateVideo")}
-                </Button>
-              </>
-            )}
           </div>
         </div>
       )}
