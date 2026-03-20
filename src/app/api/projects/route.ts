@@ -1,0 +1,172 @@
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { generateId } from "@/lib/utils";
+import path from "path";
+import fs from "fs";
+
+const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "epubs");
+
+// Ensure upload directory exists
+function ensureUploadDir() {
+  if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  }
+}
+
+// GET - List user projects
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    const projects = db
+      .prepare(`
+        SELECT
+          id,
+          user_id,
+          title,
+          description,
+          epub_path,
+          cover_image,
+          status,
+          video_url,
+          duration,
+          created_at,
+          updated_at
+        FROM projects
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+      `)
+      .all(session.user.id) as {
+        id: string;
+        user_id: string;
+        title: string;
+        description: string | null;
+        epub_path: string;
+        cover_image: string | null;
+        status: string;
+        video_url: string | null;
+        duration: number | null;
+        created_at: string;
+        updated_at: string;
+      }[];
+
+    return NextResponse.json({ projects });
+  } catch (error) {
+    console.error("Get projects error:", error);
+    return NextResponse.json(
+      { error: "获取作品列表失败" },
+      { status: 500 }
+    );
+  }
+}
+
+// POST - Create new project with file upload
+export async function POST(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    // Parse multipart form data
+    const formData = await request.formData();
+
+    const title = formData.get("title") as string;
+    const description = formData.get("description") as string | null;
+    const file = formData.get("file") as File | null;
+
+    // Validate required fields
+    if (!title || !title.trim()) {
+      return NextResponse.json(
+        { error: "请输入作品标题" },
+        { status: 400 }
+      );
+    }
+
+    if (!file) {
+      return NextResponse.json(
+        { error: "请上传 EPUB 文件" },
+        { status: 400 }
+      );
+    }
+
+    // Validate file type
+    const fileName = file.name.toLowerCase();
+    if (!fileName.endsWith(".epub")) {
+      return NextResponse.json(
+        { error: "只支持 EPUB 格式的文件" },
+        { status: 400 }
+      );
+    }
+
+    // Validate file size (max 50MB)
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      return NextResponse.json(
+        { error: "文件大小不能超过 50MB" },
+        { status: 400 }
+      );
+    }
+
+    // Ensure upload directory exists
+    ensureUploadDir();
+
+    // Generate unique filename
+    const projectId = generateId();
+    const fileExt = ".epub";
+    const newFileName = `${projectId}${fileExt}`;
+    const filePath = path.join(UPLOAD_DIR, newFileName);
+
+    // Save file
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    fs.writeFileSync(filePath, buffer);
+
+    // Create project record in database
+    const epubPath = `/uploads/epubs/${newFileName}`;
+
+    db.prepare(`
+      INSERT INTO projects (id, user_id, title, description, epub_path, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))
+    `).run(projectId, session.user.id, title.trim(), description?.trim() || null, epubPath);
+
+    // Create default project config
+    db.prepare(`
+      INSERT INTO project_configs (id, project_id, voice_model, bgm_model, sfx_model, created_at)
+      VALUES (?, ?, 'gpt-sovits', 'minimax', 'elevenlabs', datetime('now'))
+    `).run(generateId(), projectId);
+
+    return NextResponse.json(
+      {
+        message: "作品创建成功",
+        project: {
+          id: projectId,
+          title: title.trim(),
+          description: description?.trim() || null,
+          epub_path: epubPath,
+          status: "pending",
+        },
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Create project error:", error);
+    return NextResponse.json(
+      { error: "创建作品失败，请稍后重试" },
+      { status: 500 }
+    );
+  }
+}

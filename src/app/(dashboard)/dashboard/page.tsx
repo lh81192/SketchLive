@@ -37,7 +37,7 @@ export default async function DashboardPage() {
           <h1 className="text-3xl font-bold">我的作品</h1>
           <p className="text-gray-600 mt-1">管理您的漫剧项目</p>
         </div>
-        <Link href="/dashboard/create">
+        <Link href="/dashboard/new">
           <Button>创建新作品</Button>
         </Link>
       </div>
@@ -46,7 +46,7 @@ export default async function DashboardPage() {
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-gray-500 mb-4">还没有任何作品</p>
-            <Link href="/dashboard/create">
+            <Link href="/dashboard/new">
               <Button>创建您的第一个漫剧</Button>
             </Link>
           </CardContent>
