@@ -103,8 +103,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate file type
+    // Validate file type - check both extension and MIME type
     const fileName = file.name.toLowerCase();
+    const fileMimeType = file.type.toLowerCase();
+    const validEpubMimeType = "application/epub+zip";
+
+    // Check MIME type (more secure)
+    if (fileMimeType !== validEpubMimeType) {
+      return NextResponse.json(
+        { error: "文件类型必须是 EPUB 格式 (application/epub+zip)" },
+        { status: 400 }
+      );
+    }
+
+    // Also check file extension as secondary validation
     if (!fileName.endsWith(".epub")) {
       return NextResponse.json(
         { error: "只支持 EPUB 格式的文件" },
