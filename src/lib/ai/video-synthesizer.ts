@@ -174,7 +174,7 @@ export interface VideoSynthesizerConfig {
 
 export class VideoSynthesizer implements AIService {
   readonly name = 'video-synthesizer';
-  readonly provider = 'internal' as const;
+  readonly provider = 'video' as const;
 
   private config: VideoSynthesizerConfig;
   private jobs: Map<string, VideoJob> = new Map();

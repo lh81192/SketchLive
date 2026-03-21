@@ -119,7 +119,7 @@ export interface AIService {
   /** Unique identifier for the service */
   readonly name: string;
   /** Service provider/type */
-  readonly provider: 'gpt-sovits' | 'elevenlabs' | 'minimax';
+  readonly provider: 'gpt-sovits' | 'elevenlabs' | 'minimax' | 'video';
 
   /**
    * Check if the service is available and properly configured
