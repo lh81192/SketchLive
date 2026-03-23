@@ -167,6 +167,100 @@ export function initDb(): void {
     CREATE INDEX IF NOT EXISTS idx_user_model_configs_provider_type ON user_model_configs(provider_type);
   `);
 
+  // Scenes table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scenes (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      page_index INTEGER NOT NULL,
+      image_path TEXT NOT NULL,
+      raw_text TEXT,
+      scene_description TEXT,
+      camera_type TEXT,
+      character_actions TEXT,
+      dialogues TEXT,
+      mood TEXT,
+      sequence_index INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Key frames table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS key_frames (
+      id TEXT PRIMARY KEY,
+      scene_id TEXT NOT NULL,
+      frame_type TEXT NOT NULL CHECK(frame_type IN ('first', 'last')),
+      image_url TEXT,
+      prompt TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Video clips table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS video_clips (
+      id TEXT PRIMARY KEY,
+      scene_id TEXT NOT NULL,
+      first_frame_id TEXT,
+      last_frame_id TEXT,
+      video_url TEXT,
+      duration REAL,
+      prompt TEXT,
+      status TEXT DEFAULT 'pending',
+      model_used TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Audio tracks table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audio_tracks (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      track_type TEXT NOT NULL CHECK(track_type IN ('voice', 'bgm', 'sfx')),
+      scene_id TEXT,
+      audio_url TEXT,
+      duration REAL,
+      prompt TEXT,
+      voice_id TEXT,
+      model_used TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Pipeline status table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pipeline_status (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL UNIQUE,
+      current_step TEXT,
+      total_scenes INTEGER DEFAULT 0,
+      processed_scenes INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'idle',
+      error_message TEXT,
+      started_at TEXT,
+      completed_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create indexes
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_scenes_project_id ON scenes(project_id);
+    CREATE INDEX IF NOT EXISTS idx_key_frames_scene_id ON key_frames(scene_id);
+    CREATE INDEX IF NOT EXISTS idx_video_clips_scene_id ON video_clips(scene_id);
+    CREATE INDEX IF NOT EXISTS idx_audio_tracks_project_id ON audio_tracks(project_id);
+  `);
+
   console.log('Database initialized successfully!');
 }
 
