@@ -214,7 +214,9 @@ export function initDb(): void {
       status TEXT DEFAULT 'pending',
       model_used TEXT,
       created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE
+      FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE,
+      FOREIGN KEY (first_frame_id) REFERENCES key_frames(id) ON DELETE SET NULL,
+      FOREIGN KEY (last_frame_id) REFERENCES key_frames(id) ON DELETE SET NULL
     )
   `);
 
@@ -232,7 +234,8 @@ export function initDb(): void {
       model_used TEXT,
       status TEXT DEFAULT 'pending',
       created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE SET NULL
     )
   `);
 
