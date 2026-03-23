@@ -6,3 +6,4 @@ public/uploads/
 
 # Local environment file (never commit)
 .env.local
+.worktrees/
