@@ -65,9 +65,9 @@ export class EPUBParser {
         const section = this.book!.spine.get(item.index);
         if (!section) return;
 
-        const doc = section.load();
+        const doc = section.load() as Document;
         const page = this.extractPageFromDocument(
-          doc as unknown as Document,
+          doc,
           pageIndex,
           allImages
         );
@@ -75,16 +75,15 @@ export class EPUBParser {
         pageIndex++;
         section.unload();
       } catch (error) {
-        console.error(`Failed to parse page ${item.href}:`, error);
+        console.error(`Failed to parse page ${(item as any).href}:`, error);
       }
     });
 
     return {
       metadata,
       pages,
-      chapters: [],
       allImages,
-      baseUrl: '',
+      baseUrl: (this.book as any).url?.() || (this.book as any).path?.() || '',
     };
   }
 
@@ -208,7 +207,9 @@ export class EPUBParser {
         spread: 'none' as const,
       });
 
-      await rendition.display(pageIndex);
+      const spineItem = (this.book.spine as any).items[pageIndex];
+      if (!spineItem) return null;
+      await rendition.display(spineItem.href);
 
       // Note: getContents() returns an array at runtime; type def says Contents due to outdated DefinitelyTyped
       const contents = rendition.getContents() as unknown as Contents[];
