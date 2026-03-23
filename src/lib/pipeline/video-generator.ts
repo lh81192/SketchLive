@@ -140,9 +140,9 @@ async function generateFallbackVideo(
   return clip;
 }
 
-async function createVideoService(configId: string, userId: string): Promise<any | null> {
+async function createVideoService(configId: string, userId: string): Promise<VideoGenerationService | null> {
   try {
-    return await createServiceFromUserConfig(configId, userId);
+    return (await createServiceFromUserConfig(configId, userId)) as VideoGenerationService | null;
   } catch (error) {
     console.error('[VideoGenerator] Failed to create video service:', error);
     return null;
