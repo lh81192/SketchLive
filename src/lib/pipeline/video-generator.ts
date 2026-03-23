@@ -8,6 +8,11 @@
 import { createServiceFromUserConfig, getDefaultConfig } from '@/lib/ai/factory';
 import type { SceneAnalysis, VideoClip, KeyFrame, GenerationConfig } from './types';
 
+interface VideoGenerationService {
+  generateVideo?(opts: Record<string, unknown>): Promise<{ url: string; duration?: number; model?: string }>;
+  generate?(opts: Record<string, unknown>): Promise<{ url: string; duration?: number; model?: string }>;
+}
+
 export interface VideoGeneratorInput {
   scene: SceneAnalysis;
   firstFrame: KeyFrame;
@@ -29,14 +34,14 @@ export async function generateVideoClip(input: VideoGeneratorInput): Promise<Vid
     status: 'pending',
   };
 
-  let videoService: any;
+  let videoService: VideoGenerationService | null = null;
   try {
     const configId = config.videoModelConfigId || getDefaultConfig(userId, 'video')?.id;
     if (configId) {
       videoService = await createVideoService(configId, userId);
     }
   } catch (error) {
-    console.error('[VideoGenerator] Failed to create video service:', error);
+    console.warn('[VideoGenerator] Failed to create video service:', error);
   }
 
   if (!videoService) {
@@ -50,15 +55,15 @@ export async function generateVideoClip(input: VideoGeneratorInput): Promise<Vid
     const videoParams = buildVideoParams(scene, firstFrame, lastFrame, config);
 
     if ('generateVideo' in videoService) {
-      const result = await videoService.generateVideo(videoParams);
-      clip.videoUrl = result.url;
-      clip.duration = result.duration || config.videoDuration || 5;
+      const result = await videoService.generateVideo!(videoParams);
+      clip.videoUrl = result?.url ?? clip.videoUrl;
+      clip.duration = result?.duration ?? clip.duration;
       clip.status = 'completed';
       clip.modelUsed = result.model || 'video-model';
     } else if ('generate' in videoService) {
-      const result = await videoService.generate(videoParams);
-      clip.videoUrl = result.url;
-      clip.duration = result.duration || config.videoDuration || 5;
+      const result = await videoService.generate!(videoParams);
+      clip.videoUrl = result?.url ?? clip.videoUrl;
+      clip.duration = result?.duration ?? clip.duration;
       clip.status = 'completed';
       clip.modelUsed = config.videoModel;
     } else {
