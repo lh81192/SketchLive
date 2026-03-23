@@ -142,6 +142,31 @@ export function initDb(): void {
     CREATE INDEX IF NOT EXISTS idx_comments_project_id ON comments(project_id);
   `);
 
+  // User model configs table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_model_configs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      provider_type TEXT NOT NULL CHECK(provider_type IN ('text', 'image', 'video')),
+      protocol TEXT NOT NULL CHECK(protocol IN ('domestic', 'openai', 'gemini', 'seedance', 'google')),
+      name TEXT NOT NULL,
+      api_url TEXT,
+      api_key TEXT,
+      enabled INTEGER DEFAULT 1,
+      is_default INTEGER DEFAULT 0,
+      model_ids TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_user_model_configs_user_id ON user_model_configs(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_model_configs_provider_type ON user_model_configs(provider_type);
+  `);
+
   console.log('Database initialized successfully!');
 }
 
