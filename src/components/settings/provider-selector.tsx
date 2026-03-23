@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { ProviderType, Protocol, ModelProvider } from "@/lib/model-providers";
@@ -19,7 +19,7 @@ interface ProviderSelectorProps {
 }
 
 // Provider icons (simplified SVG icons)
-const providerIcons: Record<string, JSX.Element> = {
+const providerIcons: Record<string, React.ReactElement> = {
   zhipu: <span className="text-blue-500 font-bold">Z</span>,
   tongyi: <span className="text-orange-500 font-bold">通</span>,
   ernie: <span className="text-red-500 font-bold">百</span>,
@@ -57,10 +57,10 @@ export function ProviderSelector({
   className,
 }: ProviderSelectorProps) {
   // Get unique protocols for selected type
-  const protocolsInType = [...new Set(providers
+  const protocolsInType = Array.from(new Set(providers
     .filter(p => p.type === selectedType)
     .map(p => p.protocol)
-  )] as Protocol[];
+  )) as Protocol[];
 
   // Get providers filtered by selected type and protocol
   const filteredProviders = providers.filter(p => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +36,7 @@ interface ModelConfigCardProps {
 }
 
 // Provider icons (matching provider-selector.tsx)
-const providerIcons: Record<string, JSX.Element> = {
+const providerIcons: Record<string, React.ReactElement> = {
   zhipu: <span className="text-blue-500 font-bold">Z</span>,
   tongyi: <span className="text-orange-500 font-bold">通</span>,
   ernie: <span className="text-red-500 font-bold">百</span>,
