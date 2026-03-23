@@ -127,6 +127,40 @@ EPUB File Upload
    Final Video Output (mp4 / webm / mov)
 ```
 
+### Model Configuration
+
+The platform supports multiple AI model providers with different protocols:
+
+#### Text Models
+| Protocol | Providers |
+|----------|-----------|
+| 国产协议 | 智谱 AI, 通义千问, 文心一言, MiniMax, DeepSeek, 月之暗面 |
+| OpenAI 协议 | OpenAI, SiliconFlow, TogetherAI, Groq, Ollama |
+| Gemini 协议 | Google Gemini |
+
+#### Image Models
+| Protocol | Providers |
+|----------|-----------|
+| 国产协议 | 智谱 CogView, 通义万相, 百度图像生成 |
+| OpenAI 协议 | DALL-E, Stability AI |
+| Gemini 协议 | Google Imagen |
+
+#### Video Models
+| Protocol | Providers |
+|----------|-----------|
+| Seedance 协议 | 字节 Seedance |
+| 国产协议 | 智谱 CogVideoX, MiniMax 视频 |
+| Google 协议 | Google Veo |
+
+Users can configure multiple providers and set a default for each type via the Settings page.
+
+**Configuration Steps:**
+1. Visit `/dashboard/settings` after logging in
+2. Select the model type (text/image/video)
+3. Choose a provider and enter API credentials
+4. Optionally fetch available models from the provider API
+5. Set as default if desired
+
 #### License
 
 MIT
