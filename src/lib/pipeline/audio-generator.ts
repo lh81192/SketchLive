@@ -3,8 +3,20 @@
  * 生成配音、BGM、音效
  */
 
-import { createServiceFromUserConfig, getDefaultConfig } from '@/lib/ai/factory';
-import type { SceneAnalysis, AudioTrack, GenerationConfig, Dialogue } from './types';
+import { createServiceFromUserConfig } from '@/lib/ai/factory';
+import type { SceneAnalysis, AudioTrack, GenerationConfig } from './types';
+
+interface VoiceService {
+  synthesize(opts: { text: string; voiceId?: string; emotion?: string }): Promise<{ url?: string; duration?: number }>;
+}
+
+interface BGMMusicService {
+  generate(opts: { prompt: string; duration?: number; mood?: string[] }): Promise<{ url?: string }>;
+}
+
+interface SFXService {
+  generate(opts: { prompt: string; duration?: number }): Promise<{ url?: string }>;
+}
 
 export interface AudioGeneratorInput {
   projectId: string;
@@ -34,6 +46,7 @@ async function generateVoiceTracks(
   const tracks: AudioTrack[] = [];
   for (const scene of scenes) {
     if (scene.dialogues.length === 0) continue;
+    const voiceService = await createVoiceService(config, userId);
     for (const dialogue of scene.dialogues) {
       const track: AudioTrack = {
         id: `voice_${scene.sceneId}_${tracks.length}`,
@@ -46,16 +59,17 @@ async function generateVoiceTracks(
         status: 'pending',
       };
       try {
-        const voiceService = await createVoiceService(config, userId);
-        if (voiceService && 'synthesize' in voiceService) {
+        if (voiceService) {
           track.status = 'generating';
-          const result = await (voiceService as any).synthesize({
+          const result = await voiceService.synthesize({
             text: dialogue.text,
             voiceId: dialogue.speaker || config.defaultVoiceId,
             emotion: dialogue.emotion,
           });
-          track.audioUrl = result?.url;
-          track.duration = result?.duration ?? track.duration;
+          if (result) {
+            track.audioUrl = result.url;
+            track.duration = result.duration ?? track.duration;
+          }
           track.status = 'completed';
         }
       } catch (error) {
@@ -87,14 +101,16 @@ async function generateBGM(
   };
   try {
     const bgmService = await createBGMService(config, userId);
-    if (bgmService && 'generate' in bgmService) {
+    if (bgmService) {
       track.status = 'generating';
-      const result = await (bgmService as any).generate({
+      const result = await bgmService.generate({
         prompt: `适合 ${primaryMood} 氛围的背景音乐`,
         duration: track.duration,
         mood: [primaryMood],
       });
-      track.audioUrl = result?.url;
+      if (result) {
+        track.audioUrl = result.url;
+      }
       track.status = 'completed';
     }
   } catch (error) {
@@ -111,6 +127,7 @@ async function generateSFX(
   userId: string
 ): Promise<AudioTrack[]> {
   const tracks: AudioTrack[] = [];
+  const sfxService = await createSFXService(config, userId);
   for (const scene of scenes) {
     const sfxPrompt = extractSFXPrompt(scene);
     if (!sfxPrompt) continue;
@@ -125,14 +142,15 @@ async function generateSFX(
       status: 'pending',
     };
     try {
-      const sfxService = await createSFXService(config, userId);
-      if (sfxService && 'generate' in sfxService) {
+      if (sfxService) {
         track.status = 'generating';
-        const result = await (sfxService as any).generate({
+        const result = await sfxService.generate({
           prompt: sfxPrompt,
           duration: track.duration,
         });
-        track.audioUrl = result?.url;
+        if (result) {
+          track.audioUrl = result.url;
+        }
         track.status = 'completed';
       }
     } catch (error) {
@@ -181,31 +199,31 @@ function extractSFXPrompt(scene: SceneAnalysis): string | null {
   return null;
 }
 
-async function createVoiceService(config: GenerationConfig, userId: string): Promise<any | null> {
+async function createVoiceService(config: GenerationConfig, userId: string): Promise<VoiceService | null> {
+  const configId = config.voiceModelConfigId;
+  if (!configId) return null;
   try {
-    const configId = config.voiceModelConfigId || getDefaultConfig(userId, 'text')?.id;
-    if (!configId) return null;
-    return await createServiceFromUserConfig(configId, userId);
+    return (await createServiceFromUserConfig(configId, userId)) as VoiceService | null;
   } catch {
     return null;
   }
 }
 
-async function createBGMService(config: GenerationConfig, userId: string): Promise<any | null> {
+async function createBGMService(config: GenerationConfig, userId: string): Promise<BGMMusicService | null> {
+  const configId = config.bgmModelConfigId;
+  if (!configId) return null;
   try {
-    const configId = config.bgmModelConfigId || getDefaultConfig(userId, 'text')?.id;
-    if (!configId) return null;
-    return await createServiceFromUserConfig(configId, userId);
+    return (await createServiceFromUserConfig(configId, userId)) as BGMMusicService | null;
   } catch {
     return null;
   }
 }
 
-async function createSFXService(config: GenerationConfig, userId: string): Promise<any | null> {
+async function createSFXService(config: GenerationConfig, userId: string): Promise<SFXService | null> {
+  const configId = config.sfxModelConfigId;
+  if (!configId) return null;
   try {
-    const configId = config.sfxModelConfigId || getDefaultConfig(userId, 'text')?.id;
-    if (!configId) return null;
-    return await createServiceFromUserConfig(configId, userId);
+    return (await createServiceFromUserConfig(configId, userId)) as SFXService | null;
   } catch {
     return null;
   }
