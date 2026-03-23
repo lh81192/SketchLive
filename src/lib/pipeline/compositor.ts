@@ -36,7 +36,8 @@ export async function composeFinalVideo(
     status: 'pending',
   };
 
-  const validClips = input.videoClips.filter(
+  const sortedClips = [...input.videoClips].sort((a, b) => a.sceneId.localeCompare(b.sceneId));
+  const validClips = sortedClips.filter(
     (clip) => clip.status === 'completed' && clip.videoUrl
   );
 
@@ -99,7 +100,8 @@ function calculateTotalDuration(input: CompositorInput): number {
 export function generateFFmpegCommand(input: CompositorInput): string {
   const { projectId, videoClips, voiceTracks, bgmTrack, sfxTracks } = input;
 
-  const clipPaths = videoClips
+  const sortedClips = [...videoClips].sort((a, b) => a.sceneId.localeCompare(b.sceneId));
+  const clipPaths = sortedClips
     .filter((c) => c.videoUrl)
     .map((c) => `file '${c.videoUrl}'`)
     .join('\n');
@@ -121,8 +123,19 @@ export function generateFFmpegCommand(input: CompositorInput): string {
   if (audioFiles.length > 0) {
     commands.push(`# 混合音频并与视频合并`);
     const audioInput = audioFiles.join(' ');
+
+    const voiceVol = input.config.voiceVolume ?? 1.0;
+    const bgmVol = input.config.bgmVolume ?? 0.3;
+    const sfxVol = input.config.sfxVolume ?? 0.5;
+
+    const volumeFilters = [
+      `0:a?volume=${voiceVol}`,
+      `1:a?volume=${bgmVol}`,
+      `2:a?volume=${sfxVol}`,
+    ].join(',');
+
     commands.push(
-      `ffmpeg -i /tmp/${projectId}_video.mp4 ${audioInput} -filter_complex "amix=inputs=${audioFiles.length}:duration=longest" -shortest /tmp/${projectId}_final.mp4`
+      `ffmpeg -i /tmp/${projectId}_video.mp4 ${audioInput} -filter_complex "${volumeFilters},amix=inputs=${audioFiles.length}:duration=longest:normalize=0" -shortest /tmp/${projectId}_final.mp4`
     );
   } else {
     commands.push(`cp /tmp/${projectId}_video.mp4 /tmp/${projectId}_final.mp4`);
