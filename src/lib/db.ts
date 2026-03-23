@@ -194,9 +194,10 @@ export function initDb(): void {
       frame_type TEXT NOT NULL CHECK(frame_type IN ('first', 'last')),
       image_url TEXT,
       prompt TEXT,
-      status TEXT DEFAULT 'pending',
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'generating', 'completed', 'failed')),
       created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE
+      FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE CASCADE,
+      UNIQUE(scene_id, frame_type)
     )
   `);
 
@@ -259,6 +260,10 @@ export function initDb(): void {
     CREATE INDEX IF NOT EXISTS idx_key_frames_scene_id ON key_frames(scene_id);
     CREATE INDEX IF NOT EXISTS idx_video_clips_scene_id ON video_clips(scene_id);
     CREATE INDEX IF NOT EXISTS idx_audio_tracks_project_id ON audio_tracks(project_id);
+    CREATE INDEX IF NOT EXISTS idx_pipeline_status_project_id ON pipeline_status(project_id);
+    CREATE INDEX IF NOT EXISTS idx_audio_tracks_scene_id ON audio_tracks(scene_id);
+    CREATE INDEX IF NOT EXISTS idx_video_clips_first_frame_id ON video_clips(first_frame_id);
+    CREATE INDEX IF NOT EXISTS idx_video_clips_last_frame_id ON video_clips(last_frame_id);
   `);
 
   console.log('Database initialized successfully!');
