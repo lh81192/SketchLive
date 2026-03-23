@@ -6,6 +6,15 @@
 import { createServiceFromUserConfig, getDefaultConfig } from '@/lib/ai/factory';
 import type { SceneAnalysis, KeyFrame, GenerationConfig } from './types';
 
+interface ImageGenerationService {
+  generateImage(opts: {
+    prompt: string;
+    model?: string;
+    width?: number;
+    height?: number;
+  }): Promise<{ url: string }>;
+}
+
 export interface FrameGeneratorInput {
   scene: SceneAnalysis;
   nextScene?: SceneAnalysis;
@@ -74,7 +83,7 @@ function buildLastFramePrompt(scene: SceneAnalysis, nextScene?: SceneAnalysis): 
 async function createImageService(
   config: GenerationConfig,
   userId: string
-): Promise<any | null> {
+): Promise<ImageGenerationService | null> {
   try {
     const configId = config.imageModelConfigId || getDefaultConfig(userId, 'image')?.id;
     if (!configId) return null;
@@ -93,7 +102,7 @@ export async function generateKeyFramesBatch(
 ): Promise<KeyFrame[][]> {
   const results: KeyFrame[][] = [];
   for (let i = 0; i < inputs.length; i++) {
-    const input = inputs[i];
+    const input: FrameGeneratorInput = { ...inputs[i] };
     if (i < inputs.length - 1) {
       input.nextScene = inputs[i + 1].scene;
     }
