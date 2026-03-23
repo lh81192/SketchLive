@@ -5,6 +5,12 @@
 
 import ePub from 'epubjs';
 import type { Book, Contents } from 'epubjs';
+import type Section from 'epubjs/types/section';
+
+interface SpineItem {
+  index: number;
+  href?: string;
+}
 import type {
   EPUBParseResult,
   EPUBPage,
@@ -60,7 +66,7 @@ export class EPUBParser {
     let pageIndex = 0;
 
     // spine.each() iterates over each spine item
-    this.book.spine.each((item: any) => {
+    this.book.spine.each((item: SpineItem) => {
       try {
         const section = this.book!.spine.get(item.index);
         if (!section) return;
@@ -75,7 +81,7 @@ export class EPUBParser {
         pageIndex++;
         section.unload();
       } catch (error) {
-        console.error(`Failed to parse page ${(item as any).href}:`, error);
+        console.error(`Failed to parse page ${item.href}:`, error);
       }
     });
 
@@ -211,7 +217,7 @@ export class EPUBParser {
       if (!spineItem) return null;
       await rendition.display(spineItem.href);
 
-      // Note: getContents() returns an array at runtime; type def says Contents due to outdated DefinitelyTyped
+      // epubjs types are incorrect - getContents() returns an array at runtime
       const contents = rendition.getContents() as unknown as Contents[];
       if (contents && contents.length > 0) {
         const doc = contents[0].document;
