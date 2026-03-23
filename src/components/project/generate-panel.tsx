@@ -7,6 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+interface ModelConfig {
+  id: string;
+  name: string;
+  provider_id: string;
+  provider_type: string;
+  model_ids: string[];
+  enabled: boolean;
+}
+
 interface GeneratePanelProps {
   projectId: string;
   projectStatus: string;
@@ -18,36 +27,40 @@ interface GeneratePanelProps {
   } | null;
 }
 
-// Voice model options
-const voiceModels = [
-  { value: "gpt-sovits", label: "GPT-SoVITS" },
-  { value: "elevenlabs", label: "ElevenLabs" },
-  { value: "azure-tts", label: "Azure TTS" },
-];
-
-// BGM model options
-const bgmModels = [
-  { value: "minimax", label: "MiniMax" },
-  { value: "suno", label: "Suno" },
-  { value: "musicgen", label: "MusicGen" },
-];
-
-// SFX model options
-const sfxModels = [
-  { value: "elevenlabs", label: "ElevenLabs" },
-  { value: "aires", label: "AI RES" },
-];
-
 export function GeneratePanel({ projectId, projectStatus, config }: GeneratePanelProps) {
   const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Model config state
+  const [textModels, setTextModels] = useState<ModelConfig[]>([]);
+  const [imageModels, setImageModels] = useState<ModelConfig[]>([]);
+  const [videoModels, setVideoModels] = useState<ModelConfig[]>([]);
+
   // Config state
   const [voiceModel, setVoiceModel] = useState(config?.voice_model || "gpt-sovits");
   const [bgmModel, setBgmModel] = useState(config?.bgm_model || "minimax");
   const [sfxModel, setSfxModel] = useState(config?.sfx_model || "elevenlabs");
+
+  // Fetch model configs
+  useEffect(() => {
+    const fetchModelConfigs = async () => {
+      try {
+        const res = await fetch('/api/models');
+        const data = await res.json();
+        if (res.ok) {
+          const configs = data.configs.filter((c: ModelConfig) => c.enabled);
+          setTextModels(configs.filter((c: ModelConfig) => c.provider_type === 'text'));
+          setImageModels(configs.filter((c: ModelConfig) => c.provider_type === 'image'));
+          setVideoModels(configs.filter((c: ModelConfig) => c.provider_type === 'video'));
+        }
+      } catch (error) {
+        console.error('Error fetching model configs:', error);
+      }
+    };
+    fetchModelConfigs();
+  }, []);
 
   // Task polling
   const [currentTask, setCurrentTask] = useState<{
@@ -198,11 +211,36 @@ export function GeneratePanel({ projectId, projectStatus, config }: GeneratePane
             className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             disabled={isProcessing}
           >
-            {voiceModels.map((model) => (
-              <option key={model.value} value={model.value}>
-                {model.label}
-              </option>
-            ))}
+            {textModels.length > 0 ? (
+              textModels.map((model) => (
+                <optgroup key={model.id} label={model.name}>
+                  {model.model_ids && model.model_ids.length > 0 ? (
+                    model.model_ids.map((id) => (
+                      <option key={`${model.id}-${id}`} value={`${model.id}:${id}`}>
+                        {id}
+                      </option>
+                    ))
+                  ) : (
+                    <option key={model.id} value={model.id}>
+                      {model.name} (默认)
+                    </option>
+                  )}
+                </optgroup>
+              ))
+            ) : (
+              <>
+                <option value="" disabled>请先在设置中配置文本模型</option>
+                {[
+                  { value: "gpt-sovits", label: "GPT-SoVITS" },
+                  { value: "elevenlabs", label: "ElevenLabs" },
+                  { value: "azure-tts", label: "Azure TTS" },
+                ].map((model) => (
+                  <option key={model.value} value={model.value}>
+                    {model.label}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
         </div>
 
@@ -216,11 +254,36 @@ export function GeneratePanel({ projectId, projectStatus, config }: GeneratePane
             className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             disabled={isProcessing}
           >
-            {bgmModels.map((model) => (
-              <option key={model.value} value={model.value}>
-                {model.label}
-              </option>
-            ))}
+            {imageModels.length > 0 ? (
+              imageModels.map((model) => (
+                <optgroup key={model.id} label={model.name}>
+                  {model.model_ids && model.model_ids.length > 0 ? (
+                    model.model_ids.map((id) => (
+                      <option key={`${model.id}-${id}`} value={`${model.id}:${id}`}>
+                        {id}
+                      </option>
+                    ))
+                  ) : (
+                    <option key={model.id} value={model.id}>
+                      {model.name} (默认)
+                    </option>
+                  )}
+                </optgroup>
+              ))
+            ) : (
+              <>
+                <option value="" disabled>请先在设置中配置图像模型</option>
+                {[
+                  { value: "minimax", label: "MiniMax" },
+                  { value: "suno", label: "Suno" },
+                  { value: "musicgen", label: "MusicGen" },
+                ].map((model) => (
+                  <option key={model.value} value={model.value}>
+                    {model.label}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
         </div>
 
@@ -234,11 +297,35 @@ export function GeneratePanel({ projectId, projectStatus, config }: GeneratePane
             className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             disabled={isProcessing}
           >
-            {sfxModels.map((model) => (
-              <option key={model.value} value={model.value}>
-                {model.label}
-              </option>
-            ))}
+            {videoModels.length > 0 ? (
+              videoModels.map((model) => (
+                <optgroup key={model.id} label={model.name}>
+                  {model.model_ids && model.model_ids.length > 0 ? (
+                    model.model_ids.map((id) => (
+                      <option key={`${model.id}-${id}`} value={`${model.id}:${id}`}>
+                        {id}
+                      </option>
+                    ))
+                  ) : (
+                    <option key={model.id} value={model.id}>
+                      {model.name} (默认)
+                    </option>
+                  )}
+                </optgroup>
+              ))
+            ) : (
+              <>
+                <option value="" disabled>请先在设置中配置视频模型</option>
+                {[
+                  { value: "elevenlabs", label: "ElevenLabs" },
+                  { value: "aires", label: "AI RES" },
+                ].map((model) => (
+                  <option key={model.value} value={model.value}>
+                    {model.label}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
         </div>
 
