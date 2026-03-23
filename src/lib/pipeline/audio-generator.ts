@@ -44,9 +44,9 @@ async function generateVoiceTracks(
   userId: string
 ): Promise<AudioTrack[]> {
   const tracks: AudioTrack[] = [];
+  const voiceService = await createVoiceService(config, userId);
   for (const scene of scenes) {
     if (scene.dialogues.length === 0) continue;
-    const voiceService = await createVoiceService(config, userId);
     for (const dialogue of scene.dialogues) {
       const track: AudioTrack = {
         id: `voice_${scene.sceneId}_${tracks.length}`,
@@ -203,7 +203,7 @@ async function createVoiceService(config: GenerationConfig, userId: string): Pro
   const configId = config.voiceModelConfigId;
   if (!configId) return null;
   try {
-    return (await createServiceFromUserConfig(configId, userId)) as VoiceService | null;
+    return (await createServiceFromUserConfig(configId, userId)) as unknown as VoiceService | null;
   } catch {
     return null;
   }
@@ -213,7 +213,7 @@ async function createBGMService(config: GenerationConfig, userId: string): Promi
   const configId = config.bgmModelConfigId;
   if (!configId) return null;
   try {
-    return (await createServiceFromUserConfig(configId, userId)) as BGMMusicService | null;
+    return (await createServiceFromUserConfig(configId, userId)) as unknown as BGMMusicService | null;
   } catch {
     return null;
   }
@@ -223,7 +223,7 @@ async function createSFXService(config: GenerationConfig, userId: string): Promi
   const configId = config.sfxModelConfigId;
   if (!configId) return null;
   try {
-    return (await createServiceFromUserConfig(configId, userId)) as SFXService | null;
+    return (await createServiceFromUserConfig(configId, userId)) as unknown as SFXService | null;
   } catch {
     return null;
   }
