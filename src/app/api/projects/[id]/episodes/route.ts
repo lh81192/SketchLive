@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, episodes, shots, characters } from "@/lib/db/schema";
-import { eq, asc, and, max, or, isNull, isNotNull } from "drizzle-orm";
+import { projects, episodes, shots, characters, episodeCharacters } from "@/lib/db/schema";
+import { eq, asc, and, max, isNotNull, inArray } from "drizzle-orm";
 import { ulid } from "ulid";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 
@@ -61,21 +61,25 @@ export async function GET(
         return { ...ep, previewImages: [...frameSet] };
       }
 
-      // 2) Fall back to character reference images (main + this episode's guests)
-      const charImages = await db
-        .select({ referenceImage: characters.referenceImage })
-        .from(characters)
-        .where(
-          and(
-            eq(characters.projectId, id),
-            isNotNull(characters.referenceImage),
-            or(isNull(characters.episodeId), eq(characters.episodeId, ep.id))
-          )
-        );
+      // 2) Fall back to character reference images linked to this episode
+      const linkedCharIds = await db
+        .select({ characterId: episodeCharacters.characterId })
+        .from(episodeCharacters)
+        .where(eq(episodeCharacters.episodeId, ep.id));
 
-      const charUrls = charImages
-        .map((c) => c.referenceImage!)
-        .filter(Boolean);
+      let charUrls: string[] = [];
+      if (linkedCharIds.length > 0) {
+        const charImages = await db
+          .select({ referenceImage: characters.referenceImage })
+          .from(characters)
+          .where(
+            and(
+              inArray(characters.id, linkedCharIds.map((r) => r.characterId)),
+              isNotNull(characters.referenceImage)
+            )
+          );
+        charUrls = charImages.map((c) => c.referenceImage!).filter(Boolean);
+      }
 
       return { ...ep, previewImages: charUrls };
     })

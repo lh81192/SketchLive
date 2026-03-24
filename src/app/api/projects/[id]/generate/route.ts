@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { streamText } from "ai";
+import { streamText, generateText } from "ai";
 import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
@@ -48,6 +48,21 @@ function ratioToImageOpts(ratio?: string): { aspectRatio?: string; size?: string
     case "1:1":   return { aspectRatio: "1:1",  size: "2048x2048" };
     default:      return { aspectRatio: "16:9", size: "2560x1440" };
   }
+}
+
+/** Fetch characters linked to an episode via episode_characters, or all project characters if no episode. */
+async function getEpisodeCharacters(projectId: string, epId?: string | null) {
+  if (epId) {
+    const linkedIds = await db
+      .select({ characterId: episodeCharacters.characterId })
+      .from(episodeCharacters)
+      .where(eq(episodeCharacters.episodeId, epId));
+    if (linkedIds.length > 0) {
+      return db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)));
+    }
+    return [] as typeof characters.$inferSelect[];
+  }
+  return db.select().from(characters).where(eq(characters.projectId, projectId));
 }
 
 /**
@@ -490,14 +505,18 @@ async function handleBatchCharacterImage(
     );
   }
 
-  const allCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      episodeId
-        ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, episodeId)))
-        : eq(characters.projectId, projectId)
-    );
+  let allCharacters: typeof characters.$inferSelect[];
+  if (episodeId) {
+    const linkedIds = await db
+      .select({ characterId: episodeCharacters.characterId })
+      .from(episodeCharacters)
+      .where(eq(episodeCharacters.episodeId, episodeId));
+    allCharacters = linkedIds.length > 0
+      ? await db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)))
+      : [];
+  } else {
+    allCharacters = await db.select().from(characters).where(eq(characters.projectId, projectId));
+  }
 
   const needImages = allCharacters.filter((c) => !c.referenceImage);
   if (needImages.length === 0) {
@@ -585,101 +604,164 @@ async function handleShotSplitStream(
     .map((c) => ({ name: c.name, visualHint: c.visualHint! }));
 
   const model = createLanguageModel(modelConfig.text);
-
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
-  const shotSplitPrompt = buildShotSplitPrompt(script || "", characterDescriptions, characterVisualHints);
-  console.log("[ShotSplit] characterVisualHints:", JSON.stringify(characterVisualHints));
-  const result = streamText({
-    model,
-    system: buildShotSplitSystem(videoMaxDuration),
-    prompt: shotSplitPrompt,
-    providerOptions: {
-      openai: { response_format: { type: "json_object" } },
-    },
-    onFinish: async ({ text }) => {
-      try {
-        const parsedShots = JSON.parse(extractJSON(text)) as Array<{
-          sequence: number;
-          sceneDescription: string;
-          startFrame: string;
-          endFrame: string;
-          motionScript: string;
-          videoScript?: string;
-          duration: number;
-          dialogues: Array<{ character: string; text: string }>;
-          cameraDirection?: string;
-        }>;
+  const systemPrompt = buildShotSplitSystem(videoMaxDuration);
+  const jsonMode = { openai: { response_format: { type: "json_object" } } };
 
-        // Create a new version record
-        const versionWhereClause = episodeId
-          ? and(eq(storyboardVersions.projectId, projectId), eq(storyboardVersions.episodeId, episodeId))
-          : eq(storyboardVersions.projectId, projectId);
-        const [maxVersionRow] = await db
-          .select({ maxNum: storyboardVersions.versionNum })
-          .from(storyboardVersions)
-          .where(versionWhereClause)
-          .orderBy(desc(storyboardVersions.versionNum))
-          .limit(1);
-        const nextVersionNum = (maxVersionRow?.maxNum ?? 0) + 1;
-        const today = new Date();
-        const dateStr = today.getUTCFullYear().toString() +
-          String(today.getUTCMonth() + 1).padStart(2, "0") +
-          String(today.getUTCDate()).padStart(2, "0");
-        const versionLabel = `${dateStr}-V${nextVersionNum}`;
-        const versionId = ulid();
-        await db.insert(storyboardVersions).values({
-          id: versionId,
-          projectId,
-          label: versionLabel,
-          versionNum: nextVersionNum,
-          createdAt: new Date(),
-          episodeId: episodeId ?? null,
-        });
-
-        for (const shot of parsedShots) {
-          const shotId = ulid();
-          await db.insert(shots).values({
-            id: shotId,
-            projectId,
-            versionId,
-            sequence: shot.sequence,
-            prompt: shot.sceneDescription,
-            startFrameDesc: shot.startFrame,
-            endFrameDesc: shot.endFrame,
-            motionScript: shot.motionScript,
-            videoScript: shot.videoScript ?? null,
-            cameraDirection: shot.cameraDirection || "static",
-            duration: shot.duration,
-            episodeId: episodeId ?? null,
-          });
-
-          for (let i = 0; i < (shot.dialogues || []).length; i++) {
-            const dialogue = shot.dialogues[i];
-            const matchedChar = shotCharacters.find(
-              (c: typeof characters.$inferSelect) => c.name === dialogue.character
-            );
-            if (matchedChar) {
-              await db.insert(dialogues).values({
-                id: ulid(),
-                shotId,
-                characterId: matchedChar.id,
-                text: dialogue.text,
-                sequence: i,
-              });
-            }
-          }
-        }
-
-        console.log(
-          `[ShotSplit] Created ${parsedShots.length} shots`
-        );
-      } catch (err) {
-        console.error("[ShotSplit] onFinish error:", err);
-      }
-    },
+  // Split screenplay into chunks by SCENE markers (~8 scenes per chunk)
+  const fullScript = script || "";
+  const sceneChunks = splitScriptByScenes(fullScript, 8);
+  // Log scene detection details
+  const sceneRe = /^[\s*#]*(?:SCENE|场景)\s*\d+/i;
+  const sceneMatches = fullScript.split("\n").filter((l) => sceneRe.test(l.trim()));
+  console.log(`[ShotSplit] Detected ${sceneMatches.length} scenes, split into ${sceneChunks.length} chunk(s) of ~8 scenes each`);
+  sceneChunks.forEach((c, i) => {
+    const sceneCount = c.split("\n").filter((l) => sceneRe.test(l.trim())).length;
+    console.log(`[ShotSplit] Chunk ${i + 1}: ${sceneCount} scenes, ${c.length} chars`);
   });
 
-  return result.toTextStreamResponse();
+  type ParsedShot = {
+    sequence: number;
+    sceneDescription: string;
+    startFrame: string;
+    endFrame: string;
+    motionScript: string;
+    videoScript?: string;
+    duration: number;
+    dialogues: Array<{ character: string; text: string }>;
+    cameraDirection?: string;
+  };
+
+  // Process chunks concurrently
+  const chunkResults = await Promise.all(
+    sceneChunks.map(async (chunk, idx) => {
+      const prompt = buildShotSplitPrompt(chunk, characterDescriptions, characterVisualHints);
+      try {
+        const result = await generateText({
+          model,
+          system: systemPrompt,
+          prompt,
+          providerOptions: jsonMode,
+        });
+        const parsed = JSON.parse(extractJSON(result.text));
+        // Handle both array and {shots:[]} formats
+        const shots = Array.isArray(parsed) ? parsed : (parsed.shots || []);
+        console.log(`[ShotSplit] Chunk ${idx + 1}/${sceneChunks.length}: ${shots.length} shots`);
+        return shots as ParsedShot[];
+      } catch (err) {
+        console.error(`[ShotSplit] Chunk ${idx + 1} failed:`, err);
+        return [] as ParsedShot[];
+      }
+    })
+  );
+
+  // Merge and re-sequence
+  const allShots = chunkResults.flat();
+  allShots.forEach((s, i) => { s.sequence = i + 1; });
+
+  if (allShots.length === 0) {
+    return NextResponse.json({ error: "Failed to generate shots" }, { status: 500 });
+  }
+
+  // Create version record
+  const versionWhereClause = episodeId
+    ? and(eq(storyboardVersions.projectId, projectId), eq(storyboardVersions.episodeId, episodeId))
+    : eq(storyboardVersions.projectId, projectId);
+  const [maxVersionRow] = await db
+    .select({ maxNum: storyboardVersions.versionNum })
+    .from(storyboardVersions)
+    .where(versionWhereClause)
+    .orderBy(desc(storyboardVersions.versionNum))
+    .limit(1);
+  const nextVersionNum = (maxVersionRow?.maxNum ?? 0) + 1;
+  const today = new Date();
+  const dateStr = today.getUTCFullYear().toString() +
+    String(today.getUTCMonth() + 1).padStart(2, "0") +
+    String(today.getUTCDate()).padStart(2, "0");
+  const versionLabel = `${dateStr}-V${nextVersionNum}`;
+  const versionId = ulid();
+  await db.insert(storyboardVersions).values({
+    id: versionId,
+    projectId,
+    label: versionLabel,
+    versionNum: nextVersionNum,
+    createdAt: new Date(),
+    episodeId: episodeId ?? null,
+  });
+
+  for (const shot of allShots) {
+    const shotId = ulid();
+    await db.insert(shots).values({
+      id: shotId,
+      projectId,
+      versionId,
+      sequence: shot.sequence,
+      prompt: shot.sceneDescription,
+      startFrameDesc: shot.startFrame,
+      endFrameDesc: shot.endFrame,
+      motionScript: shot.motionScript,
+      videoScript: shot.videoScript ?? null,
+      cameraDirection: shot.cameraDirection || "static",
+      duration: shot.duration,
+      episodeId: episodeId ?? null,
+    });
+
+    for (let i = 0; i < (shot.dialogues || []).length; i++) {
+      const dialogue = shot.dialogues[i];
+      const matchedChar = shotCharacters.find(
+        (c: typeof characters.$inferSelect) => c.name === dialogue.character
+      );
+      if (matchedChar) {
+        await db.insert(dialogues).values({
+          id: ulid(),
+          shotId,
+          characterId: matchedChar.id,
+          text: dialogue.text,
+          sequence: i,
+        });
+      }
+    }
+  }
+
+  console.log(`[ShotSplit] Created ${allShots.length} shots from ${sceneChunks.length} chunks`);
+  return NextResponse.json({ shots: allShots.length });
+}
+
+/** Split screenplay text into chunks by SCENE markers, ~maxScenes per chunk.
+ *  Preserves the header (VISUAL STYLE + CHARACTERS) and prepends it to every chunk. */
+function splitScriptByScenes(script: string, maxScenes: number): string[] {
+  // Match SCENE markers with optional markdown bold (**), whitespace, or other decorators
+  const scenePattern = /^[\s*#]*(?:SCENE|场景)\s*\d+/i;
+  const lines = script.split("\n");
+
+  // Find scene boundary line indices
+  const boundaries: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (scenePattern.test(lines[i].trim())) {
+      boundaries.push(i);
+    }
+  }
+
+  // If no scene markers found or few scenes, return as single chunk
+  if (boundaries.length <= maxScenes) {
+    return [script];
+  }
+
+  // Everything before the first SCENE marker is the header (VISUAL STYLE + CHARACTERS)
+  const header = lines.slice(0, boundaries[0]).join("\n").trim();
+
+  // Group scenes into chunks, prepend header to each
+  const chunks: string[] = [];
+  for (let i = 0; i < boundaries.length; i += maxScenes) {
+    const start = boundaries[i];
+    const end = i + maxScenes < boundaries.length
+      ? boundaries[i + maxScenes]
+      : lines.length;
+    const scenesText = lines.slice(start, end).join("\n");
+    chunks.push(header ? `${header}\n\n${scenesText}` : scenesText);
+  }
+
+  return chunks;
 }
 
 // --- single_shot_rewrite: regenerate text fields for one shot ---
@@ -704,14 +786,7 @@ async function handleSingleShotRewrite(
   }
 
   const shotEpisodeId = episodeId || shot.episodeId;
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      shotEpisodeId
-        ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, shotEpisodeId)))
-        : eq(characters.projectId, projectId)
-    );
+  const projectCharacters = await getEpisodeCharacters(projectId, shotEpisodeId);
   const characterDescriptions = projectCharacters
     .map((c) => `${c.name}: ${c.description}`)
     .join("\n");
@@ -818,23 +893,37 @@ async function handleBatchFrameGenerate(
     ? await getVersionedUploadDir(batchVersionId)
     : process.env.UPLOAD_DIR || "./uploads";
 
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      episodeId
-        ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, episodeId)))
-        : eq(characters.projectId, projectId)
-    );
+  // Fetch only characters linked to this episode
+  let frameCharacters: typeof characters.$inferSelect[];
+  if (episodeId) {
+    const linkedIds = await db
+      .select({ characterId: episodeCharacters.characterId })
+      .from(episodeCharacters)
+      .where(eq(episodeCharacters.episodeId, episodeId));
+    frameCharacters = linkedIds.length > 0
+      ? await db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)))
+      : [];
+  } else {
+    frameCharacters = await db.select().from(characters).where(eq(characters.projectId, projectId));
+  }
 
-  const characterDescriptions = projectCharacters
+  const characterDescriptions = frameCharacters
     .map((c) => `${c.name}: ${c.description}`)
     .join("\n");
+
+  const charsWithImages = frameCharacters.filter((c) => c.referenceImage);
+  const charRefImages = charsWithImages.map((c) => c.referenceImage!) ;
+  const charRefLabels = charsWithImages.map((c) => c.name);
 
   const ai = resolveImageProvider(modelConfig, versionedUploadDir);
   const results: Array<{ shotId: string; sequence: number; status: string; firstFrame?: string; lastFrame?: string; error?: string }> = [];
 
   const overwrite = payload?.overwrite === true;
+  const needProcess = allShots.filter((s) => overwrite || !s.firstFrame || !s.lastFrame);
+  const skipCount = allShots.length - needProcess.length;
+
+  console.log(`[BatchFrameGenerate] Total: ${allShots.length} shots, need: ${needProcess.length}, skip: ${skipCount}, characters: ${frameCharacters.length}`);
+
   let previousLastFrame: string | undefined;
 
   for (let i = 0; i < allShots.length; i++) {
@@ -851,6 +940,7 @@ async function handleBatchFrameGenerate(
       continue;
     }
 
+    const startTime = Date.now();
     try {
       await db
         .update(shots)
@@ -859,10 +949,8 @@ async function handleBatchFrameGenerate(
 
       let firstFramePath: string;
 
-      const charRefImages = projectCharacters.map((c) => c.referenceImage).filter(Boolean) as string[];
-
-      if (i === 0) {
-        // First shot: generate first frame
+      if (i === 0 || !previousLastFrame) {
+        // First shot or broken chain: generate first frame
         const firstPrompt = buildFirstFramePrompt({
           sceneDescription: shot.prompt || "",
           startFrameDesc: shot.startFrameDesc || shot.prompt || "",
@@ -872,10 +960,11 @@ async function handleBatchFrameGenerate(
           ...imageOpts,
           quality: "hd",
           referenceImages: charRefImages,
+          referenceLabels: charRefLabels,
         });
       } else {
         // Continuity chain: reuse previous shot's last frame
-        firstFramePath = previousLastFrame!;
+        firstFramePath = previousLastFrame;
       }
 
       // Generate last frame for this shot
@@ -889,6 +978,7 @@ async function handleBatchFrameGenerate(
         ...imageOpts,
         quality: "hd",
         referenceImages: [firstFramePath, ...charRefImages],
+          referenceLabels: ["首帧/First Frame", ...charRefLabels],
       });
 
       await db
@@ -902,6 +992,9 @@ async function handleBatchFrameGenerate(
 
       previousLastFrame = lastFramePath;
 
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[BatchFrameGenerate] Shot ${shot.sequence}/${allShots.length} completed (${elapsed}s)`);
+
       results.push({
         shotId: shot.id,
         sequence: shot.sequence,
@@ -909,14 +1002,14 @@ async function handleBatchFrameGenerate(
         firstFrame: firstFramePath,
         lastFrame: lastFramePath,
       });
-
-      console.log(`[BatchFrameGenerate] Shot ${shot.sequence} completed`);
     } catch (err) {
-      console.error(`[BatchFrameGenerate] Error for shot ${shot.sequence}:`, err);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.error(`[BatchFrameGenerate] Shot ${shot.sequence}/${allShots.length} failed (${elapsed}s):`, err);
       await db
         .update(shots)
         .set({ status: "failed" })
         .where(eq(shots.id, shot.id));
+      previousLastFrame = undefined; // Break chain so next shot generates its own first frame
       results.push({
         shotId: shot.id,
         sequence: shot.sequence,
@@ -925,6 +1018,10 @@ async function handleBatchFrameGenerate(
       });
     }
   }
+
+  const okCount = results.filter((r) => r.status === "ok").length;
+  const errCount = results.filter((r) => r.status === "error").length;
+  console.log(`[BatchFrameGenerate] Done: ${okCount} ok, ${errCount} errors, ${skipCount} skipped`);
 
   return NextResponse.json({ results });
 }
@@ -953,14 +1050,7 @@ async function handleSingleFrameGenerate(
   const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
 
   const shotEpisodeId = episodeId || shot.episodeId;
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      shotEpisodeId
-        ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, shotEpisodeId)))
-        : eq(characters.projectId, projectId)
-    );
+  const projectCharacters = await getEpisodeCharacters(projectId, shotEpisodeId);
 
   const characterDescriptions = projectCharacters
     .map((c) => `${c.name}: ${c.description}`)
@@ -1201,14 +1291,7 @@ async function handleBatchVideoGenerate(
     return NextResponse.json({ results: [], message: "No eligible shots" });
   }
 
-  const batchCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      episodeId
-        ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, episodeId)))
-        : eq(characters.projectId, projectId)
-    );
+  const batchCharacters = await getEpisodeCharacters(projectId, episodeId);
   const characterDescriptions = batchCharacters
     .map((c) => `${c.name}: ${c.description}`)
     .join("\n");
@@ -1403,14 +1486,7 @@ async function handleBatchSceneFrame(
     return NextResponse.json({ results: [], message: "No eligible shots" });
   }
 
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      episodeId
-        ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, episodeId)))
-        : eq(characters.projectId, projectId)
-    );
+  const projectCharacters = await getEpisodeCharacters(projectId, episodeId);
 
   const charRefs = projectCharacters
     .filter((c) => !!c.referenceImage)
@@ -1684,14 +1760,7 @@ async function handleBatchReferenceVideo(
     return NextResponse.json({ results: [], message: "No eligible shots" });
   }
 
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      episodeId
-        ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, episodeId)))
-        : eq(characters.projectId, projectId)
-    );
+  const projectCharacters = await getEpisodeCharacters(projectId, episodeId);
 
   // Toonflow pattern: collect all character reference images
   const charRefs = projectCharacters
@@ -1948,10 +2017,13 @@ async function handleSingleVideoPrompt(
   const [shot] = await db.select().from(shots).where(eq(shots.id, shotId)).limit(1);
   if (!shot) return NextResponse.json({ error: "Shot not found" }, { status: 404 });
 
-  // Use sceneRefFrame for reference mode, or first/last frame for keyframe mode
-  const frameForVision = shot.sceneRefFrame || shot.firstFrame || shot.lastFrame;
-  console.log(`[SingleVideoPrompt] shot.sequence=${shot.sequence}, sceneRefFrame=${!!shot.sceneRefFrame}, firstFrame=${!!shot.firstFrame}, frameForVision=${!!frameForVision}`);
-  if (!frameForVision) {
+  // Collect first + last frames for vision (both needed for transition prompt)
+  const visionFrames: string[] = [];
+  if (shot.firstFrame) visionFrames.push(shot.firstFrame);
+  if (shot.lastFrame) visionFrames.push(shot.lastFrame);
+  if (visionFrames.length === 0 && shot.sceneRefFrame) visionFrames.push(shot.sceneRefFrame);
+  console.log(`[SingleVideoPrompt] shot.sequence=${shot.sequence}, frames=${visionFrames.length} (first=${!!shot.firstFrame}, last=${!!shot.lastFrame}, sceneRef=${!!shot.sceneRefFrame})`);
+  if (visionFrames.length === 0) {
     return NextResponse.json({ error: "No frame available. Generate frames first." }, { status: 400 });
   }
 
@@ -1995,8 +2067,7 @@ async function handleSingleVideoPrompt(
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequest}`);
     const rawPrompt = await textProvider.generateText(promptRequest, {
       systemPrompt: REF_VIDEO_PROMPT_SYSTEM,
-      images: [frameForVision],
-      temperature: 0.7,
+      images: visionFrames,
     });
     const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
     console.log(`[SingleVideoPrompt] Shot ${shot.sequence} videoPrompt:\n${videoPrompt}`);
@@ -2023,67 +2094,73 @@ async function handleBatchVideoPrompt(
   if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
   const batchShots = await db.select().from(shots).where(and(...shotWhereConditions)).orderBy(asc(shots.sequence));
 
-  const batchCharacters = await db.select().from(characters).where(
-    episodeId
-      ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, episodeId)))
-      : eq(characters.projectId, projectId)
-  );
+  const batchCharacters = await getEpisodeCharacters(projectId, episodeId);
 
-  // Only process shots that have at least one frame
-  const eligible = batchShots.filter((s) => s.sceneRefFrame || s.firstFrame || s.lastFrame);
+  // Only process shots that have frames
+  const eligible = batchShots.filter((s) => s.firstFrame || s.lastFrame || s.sceneRefFrame);
 
   const textProvider = resolveAIProvider(modelConfig);
-  const results: Array<{ shotId: string; status: string }> = [];
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
 
-  for (const shot of eligible) {
-    try {
-      const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
-      const frameForVision = shot.sceneRefFrame || shot.firstFrame || shot.lastFrame;
-      const shotDialogues = await db
-        .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
-        .from(dialogues)
-        .where(eq(dialogues.shotId, shot.id))
-        .orderBy(asc(dialogues.sequence));
-      const videoContextForDialogue = shot.videoScript || shot.motionScript || shot.prompt || "";
-      const onScreenDialogueChars = shotDialogues
-        .map((d) => batchCharacters.find((c) => c.id === d.characterId)?.name ?? "Unknown")
-        .filter((name) => isCharacterOnScreen(name, videoContextForDialogue, shot.startFrameDesc));
-      
-      const dialogueList = shotDialogues.map((d) => {
-        const char = batchCharacters.find((c) => c.id === d.characterId);
-        const characterName = char?.name ?? "Unknown";
-        const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shot.startFrameDesc);
-        const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
-        return {
-          characterName,
-          text: d.text,
-          offscreen: !onScreen,
-          visualHint,
-        };
-      });
+  console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars)`);
+  const bvpStartTime = Date.now();
 
-      const motionContext = shot.videoScript || shot.motionScript || shot.prompt || "";
-      const promptRequest = buildRefVideoPromptRequest({
-        motionScript: motionContext,
-        cameraDirection: shot.cameraDirection || "static",
-        duration: effectiveDuration,
-        characters: batchCharacters,
-        dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-      });
-      const rawPrompt = await textProvider.generateText(promptRequest, {
-        systemPrompt: REF_VIDEO_PROMPT_SYSTEM,
-        images: [frameForVision!],
-        temperature: 0.7,
-      });
-      const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
-      await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
-      results.push({ shotId: shot.id, status: "ok" });
-    } catch (err) {
-      console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed:`, err);
-      results.push({ shotId: shot.id, status: "error" });
-    }
-  }
+  const results = await Promise.all(
+    eligible.map(async (shot) => {
+      try {
+        const shotStart = Date.now();
+        const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
+        // Collect frames for vision: first frame + last frame (both needed for transition)
+        const visionFrames: string[] = [];
+        if (shot.firstFrame) visionFrames.push(shot.firstFrame);
+        if (shot.lastFrame) visionFrames.push(shot.lastFrame);
+        // Fallback to scene ref frame if no first/last frames
+        if (visionFrames.length === 0 && shot.sceneRefFrame) visionFrames.push(shot.sceneRefFrame);
+        const shotDialogues = await db
+          .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
+          .from(dialogues)
+          .where(eq(dialogues.shotId, shot.id))
+          .orderBy(asc(dialogues.sequence));
+        const videoContextForDialogue = shot.videoScript || shot.motionScript || shot.prompt || "";
 
+        const dialogueList = shotDialogues.map((d) => {
+          const char = batchCharacters.find((c) => c.id === d.characterId);
+          const characterName = char?.name ?? "Unknown";
+          const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shot.startFrameDesc);
+          const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
+          return {
+            characterName,
+            text: d.text,
+            offscreen: !onScreen,
+            visualHint,
+          };
+        });
+
+        const motionContext = shot.videoScript || shot.motionScript || shot.prompt || "";
+        const promptRequest = buildRefVideoPromptRequest({
+          motionScript: motionContext,
+          cameraDirection: shot.cameraDirection || "static",
+          duration: effectiveDuration,
+          characters: batchCharacters,
+          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+        });
+        const rawPrompt = await textProvider.generateText(promptRequest, {
+          systemPrompt: REF_VIDEO_PROMPT_SYSTEM,
+          images: visionFrames,
+        });
+        const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
+        await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
+        console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${visionFrames.length} frames)`);
+        return { shotId: shot.id, status: "ok" };
+      } catch (err) {
+        console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed:`, err);
+        return { shotId: shot.id, status: "error" };
+      }
+    })
+  );
+
+  const okCount = results.filter((r) => r.status === "ok").length;
+  const errCount = results.filter((r) => r.status === "error").length;
+  console.log(`[BatchVideoPrompt] Done: ${okCount} ok, ${errCount} errors, total ${((Date.now() - bvpStartTime) / 1000).toFixed(1)}s`);
   return NextResponse.json({ results, status: "ok" });
 }
