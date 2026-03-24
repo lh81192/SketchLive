@@ -180,6 +180,7 @@ export function initDb(): void {
       character_actions TEXT,
       dialogues TEXT,
       mood TEXT,
+      frames_status TEXT DEFAULT 'pending' CHECK(frames_status IN ('pending', 'completed', 'failed')),
       sequence_index INTEGER NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -256,6 +257,15 @@ export function initDb(): void {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )
   `);
+
+  // Ensure scenes.frames_status column exists (migration for existing DBs)
+  try {
+    db.exec(
+      "ALTER TABLE scenes ADD COLUMN frames_status TEXT DEFAULT 'pending' CHECK(frames_status IN ('pending', 'completed', 'failed'))"
+    );
+  } catch {
+    // Column may already exist in newer schema versions
+  }
 
   // Create indexes
   db.exec(`
