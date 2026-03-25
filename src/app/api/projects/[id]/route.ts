@@ -3,9 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import path from "path";
-import fs from "fs";
+import {
+  deleteProjectForUser,
+  ProjectNotFoundError,
+  ProjectForbiddenError,
+} from "@/lib/project-deletion";
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "epubs");
+const PUBLIC_ROOT = path.join(process.cwd(), "public");
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -260,35 +264,27 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
 
-    // Check if project exists and belongs to user
-    const project = db.prepare(`
-      SELECT id, user_id, epub_path FROM projects WHERE id = ?
-    `).get(id) as { id: string; user_id: string; epub_path: string } | undefined;
-
-    if (!project) {
-      return NextResponse.json(
-        { error: "作品不存在" },
-        { status: 404 }
-      );
-    }
-
-    if (project.user_id !== session.user.id) {
-      return NextResponse.json(
-        { error: "无权限删除该作品" },
-        { status: 403 }
-      );
-    }
-
-    // Delete the EPUB file
-    if (project.epub_path) {
-      const filePath = path.join(process.cwd(), "public", project.epub_path);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    try {
+      deleteProjectForUser(db, {
+        userId: session.user.id,
+        projectId: id,
+        publicRoot: PUBLIC_ROOT,
+      });
+    } catch (error) {
+      if (error instanceof ProjectNotFoundError) {
+        return NextResponse.json(
+          { error: "作品不存在" },
+          { status: 404 }
+        );
       }
+      if (error instanceof ProjectForbiddenError) {
+        return NextResponse.json(
+          { error: "无权限删除该作品" },
+          { status: 403 }
+        );
+      }
+      throw error;
     }
-
-    // Delete from database (cascades to configs and tasks)
-    db.prepare("DELETE FROM projects WHERE id = ?").run(id);
 
     return NextResponse.json({
       message: "作品删除成功",

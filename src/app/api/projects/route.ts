@@ -2,11 +2,19 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getDashboardProjects } from "@/lib/dashboard-projects";
 import { generateId } from "@/lib/utils";
 import path from "path";
 import fs from "fs";
+import {
+  deleteProjectsForUser,
+  InvalidProjectDeletionRequestError,
+  ProjectNotFoundError,
+  ProjectForbiddenError,
+} from "@/lib/project-deletion";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "epubs");
+const PUBLIC_ROOT = path.join(process.cwd(), "public");
 
 // Ensure upload directory exists
 function ensureUploadDir() {
@@ -27,37 +35,7 @@ export async function GET() {
       );
     }
 
-    const projects = db
-      .prepare(`
-        SELECT
-          id,
-          user_id,
-          title,
-          description,
-          epub_path,
-          cover_image,
-          status,
-          video_url,
-          duration,
-          created_at,
-          updated_at
-        FROM projects
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-      `)
-      .all(session.user.id) as {
-        id: string;
-        user_id: string;
-        title: string;
-        description: string | null;
-        epub_path: string;
-        cover_image: string | null;
-        status: string;
-        video_url: string | null;
-        duration: number | null;
-        created_at: string;
-        updated_at: string;
-      }[];
+    const projects = getDashboardProjects(db, session.user.id);
 
     return NextResponse.json({ projects });
   } catch (error) {
@@ -178,6 +156,81 @@ export async function POST(request: Request) {
     console.error("Create project error:", error);
     return NextResponse.json(
       { error: "创建作品失败，请稍后重试" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Bulk delete projects
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "请求格式错误" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !body ||
+      typeof body !== "object" ||
+      !Array.isArray((body as Record<string, unknown>).projectIds)
+    ) {
+      return NextResponse.json(
+        { error: "projectIds 数组不能为空" },
+        { status: 400 }
+      );
+    }
+
+    const { projectIds } = body as { projectIds: string[] };
+
+    try {
+      const result = deleteProjectsForUser(db, {
+        userId: session.user.id,
+        projectIds,
+        publicRoot: PUBLIC_ROOT,
+      });
+      return NextResponse.json({
+        message: "批量删除成功",
+        deletedCount: result.deletedCount,
+      });
+    } catch (error) {
+      if (error instanceof InvalidProjectDeletionRequestError) {
+        return NextResponse.json(
+          { error: "projectIds 数组不能为空" },
+          { status: 400 }
+        );
+      }
+      if (error instanceof ProjectNotFoundError) {
+        return NextResponse.json(
+          { error: `作品不存在: ${error.projectId}` },
+          { status: 404 }
+        );
+      }
+      if (error instanceof ProjectForbiddenError) {
+        return NextResponse.json(
+          { error: "无权限删除部分作品" },
+          { status: 403 }
+        );
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error("Bulk delete project error:", error);
+    return NextResponse.json(
+      { error: "批量删除失败" },
       { status: 500 }
     );
   }
