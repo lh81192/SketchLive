@@ -299,7 +299,7 @@ export function deleteProjectsForUser(
   }
 
   // Deduplicate IDs
-  const uniqueIds = [...new Set(projectIds)];
+  const uniqueIds = Array.from(new Set(projectIds));
 
   if (uniqueIds.length === 0) {
     throw new InvalidProjectDeletionRequestError("projectIds cannot be empty");
