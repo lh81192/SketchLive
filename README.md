@@ -1,36 +1,52 @@
 # SketchLive (绘活)
 
-> v0.2.0
+> v0.3.0
 
 绘活 — 从剧本到动画视频的全自动流水线。
 
 ## 功能特性
 
-- **剧本导入** — 支持上传 TXT/DOCX/PDF 文件，AI 自动解析文本、提取角色、智能分集，流程可视化
+### 核心功能
+- **EPUB 导入** — 支持上传 EPUB 文件，AI 自动解析章节、提取角色、选择页面生成故事板
+- **剧本导入** — 支持上传 TXT/DOCX/PDF 文件，AI 自动解析文本、提取角色、智能分集
 - **分集管理** — 项目级分集列表，角色按集关联，支持手动创建或导入自动分集
 - **角色管理** — 项目级角色管理，主角/配角分区展示，支持跨集复用和按集独立解析
-- **剧本创作** — 手动编写或 AI 辅助生成剧本
-- **角色提取** — AI 自动从剧本中提取角色并生成详细视觉描述
-- **角色四视图** — 为每个角色生成四视图参考图（正面/四分之三/侧面/背面），确保后续帧画面一致性
 - **智能分镜** — AI 将剧本拆解为专业镜头列表（含构图、灯光、运镜指令）
-- **首尾帧生成** — 为每个镜头生成起始帧和结束帧关键画面（首尾帧模式 / 场景参考帧模式）
+- **双模式生成** — 支持首尾帧模式和场景参考帧模式，适配不同创作需求
+- **首尾帧生成** — 为每个镜头生成起始帧和结束帧关键画面
+- **场景参考帧** — 基于角色和场景描述生成参考帧，确保画面一致性
 - **视频提示词** — AI 基于分镜描述和参考帧自动生成视频提示词，支持直接编辑
-- **视频生成** — 基于首尾帧插值生成动画视频片段
+- **视频生成** — 基于首尾帧插值或场景参考生成动画视频片段
 - **视频合成** — 将所有片段拼接为完整动画，支持字幕烧录
-- **分镜工作流** — 分镜编辑抽屉、角色内联面板、看板视图三种协作视图，支持单张分镜精细编辑
+- **分镜版本** — 创建多个版本进行对比迭代
+
+### 协作与编辑
+- **分镜工作流** — 分镜编辑抽屉、角色内联面板、看板视图三种协作视图
+- **单张精细编辑** — 通过抽屉式面板对单个镜头进行精细调整
+- **看板视图** — 按生成进度自动分类（待生成帧/待生成提示词/待生成视频/已完成）
+- **批量操作** — 支持批量生成帧、提示词、视频，可选择覆盖或跳过已有内容
 - **帧图管理** — 生成帧支持手动上传替换及一键清除
-- **资源下载** — 支持最终视频下载及全部素材打包下载
+- **自动流水线** — 一键运行完整生成流程：分镜→帧→提示词→视频→合成
+
+### 平台与支持
 - **多语言** — 中文 / English / 日本語 / 한국어
-- **风格自适应** — 自动识别剧本风格（动漫/写实等），角色四视图与首尾帧生成均匹配对应风格
-- **视频比例** — 支持 16:9 / 9:16 / 1:1 / 自适应比例，首尾帧与视频生成统一比例
-- **多模型** — 支持 OpenAI、Gemini、Kling、Seedance、Veo 等多家 AI 供应商，可按项目配置
+- **深色模式** — 支持浅色/深色/跟随系统三种主题
+- **风格自适应** — 自动识别剧本风格（动漫/写实等），画面生成匹配对应风格
+- **视频比例** — 支持 16:9 / 9:16 / 1:1，首尾帧与视频生成统一比例
+- **多模型支持** — 支持 OpenAI、Gemini、Kling、Seedance、Veo 等多家 AI 供应商
+- **资源下载** — 支持最终视频下载及全部素材打包下载
+
+### 用户系统
+- **用户认证** — 注册、登录、会话管理
+- **项目管理** — 创建、编辑、删除项目
+- **管理员后台** — 用户概览、模型配置管理
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 框架 | Next.js 16 (App Router) |
-| 前端 | React 19, Tailwind CSS 4, Zustand, Base UI |
+| 框架 | Next.js 16 (App Router + Turbopack) |
+| 前端 | React 19, Tailwind CSS 4, Zustand, Base UI, shadcn/ui |
 | 国际化 | next-intl |
 | 数据库 | SQLite + Drizzle ORM |
 | AI 文本 | OpenAI / Gemini (via AI SDK) |
@@ -53,6 +69,14 @@
 pnpm install
 ```
 
+### 环境变量
+
+复制 `.env.example` 为 `.env.local` 并配置必要的环境变量：
+
+```bash
+cp .env.example .env.local
+```
+
 ### 初始化数据库
 
 ```bash
@@ -70,11 +94,9 @@ pnpm dev
 ## 生成流水线
 
 ```
-剧本输入 → 剧本解析 → 角色提取 → 角色四视图
+剧本输入 → 剧本解析 → 角色提取 → 智能分镜
                                       ↓
-                                   智能分镜
-                                      ↓
-                         参考帧生成 / 首尾帧生成（逐镜头）
+                    首尾帧生成 / 场景参考帧生成（逐镜头）
                                       ↓
                               视频提示词生成（逐镜头）
                                       ↓
@@ -83,7 +105,7 @@ pnpm dev
                                  视频合成 + 字幕
 ```
 
-每个阶段支持单独触发或批量生成，用户可完全控制流水线节奏。分镜页提供列表视图和看板视图，看板按生成进度自动分列。支持分镜版本管理，可创建多个版本进行对比迭代。
+每个阶段支持单独触发或批量生成，支持覆盖已有内容或跳过已完成项。分镜页提供列表视图和看板视图，看板按生成进度自动分列。
 
 ## 项目结构
 
@@ -91,63 +113,97 @@ pnpm dev
 src/
 ├── app/
 │   ├── [locale]/                # i18n 路由
-│   │   ├── (dashboard)/         # 项目列表
-│   │   ├── project/[id]/        # 项目编辑器
-│   │   │   ├── script/          # 剧本编辑
-│   │   │   ├── characters/      # 角色管理
-│   │   │   ├── storyboard/      # 分镜面板
-│   │   │   └── preview/         # 预览 & 合成
-│   │   └── settings/            # 模型配置
-│   └── api/                     # API 路由
+│   │   ├── (app)/              # 应用布局
+│   │   │   └── app/            # 仪表盘（项目列表）
+│   │   ├── login/              # 登录页
+│   │   ├── register/           # 注册页
+│   │   ├── admin/             # 管理后台
+│   │   │   └── login/         # 管理员登录
+│   │   ├── project/[id]/      # 项目编辑器
+│   │   │   ├── import/       # 导入（剧本/EPUB）
+│   │   │   ├── episodes/     # 分集管理
+│   │   │   │   ├── [episodeId]/storyboard/  # 分镜面板
+│   │   │   │   └── [episodeId]/preview/      # 预览 & 合成
+│   │   │   ├── characters/   # 角色管理
+│   │   │   └── preview/      # 旧版预览（兼容）
+│   │   └── settings/          # 设置
+│   └── api/                   # API 路由
+│       ├── auth/             # 用户认证
+│       ├── admin/            # 管理后台 API
+│       └── projects/         # 项目 API
 ├── components/
-│   ├── ui/                      # 基础 UI 组件
-│   ├── editor/                  # 编辑器组件
-│   └── settings/                # 设置组件
+│   ├── ui/                   # 基础 UI 组件
+│   ├── editor/               # 编辑器组件（分镜卡片、看板、抽屉等）
+│   └── settings/             # 设置组件
 ├── lib/
-│   ├── ai/                      # AI 供应商 & Prompt
-│   ├── pipeline/                # 生成流水线
-│   ├── db/                      # 数据库 Schema
-│   └── video/                   # FFmpeg 处理
-└── stores/                      # Zustand 状态管理
+│   ├── ai/                   # AI 供应商 & Prompt
+│   │   └── providers/        # OpenAI, Gemini, Kling, Veo 等
+│   ├── auth/                 # 用户认证
+│   ├── admin/                # 管理员认证
+│   ├── epub/                 # EPUB 解析
+│   ├── db/                   # 数据库 Schema
+│   ├── pipeline/             # 生成流水线
+│   └── video/                # FFmpeg 处理
+├── stores/                   # Zustand 状态管理
+│   ├── project-store.ts     # 项目状态
+│   ├── episode-store.ts     # 分集状态
+│   └── model-store.ts        # 模型配置
+└── hooks/                    # 自定义 Hooks
 ```
 
 ## 数据模型
 
-- **Project** — 项目（剧本、状态）
-- **Character** — 角色（名称、描述、参考图）
-- **Shot** — 镜头（序号、提示词、时长、首尾帧、视频）
-- **Dialogue** — 对白（角色、文本、音频）
-- **Task** — 后台任务队列
+```
+Project
+├── title: string
+├── status: 'draft' | 'processing' | 'completed'
+├── inputSource: 'script' | 'epub'
+├── generationMode: 'keyframe' | 'reference'
+├── characters: Character[]
+├── episodes: Episode[]
+└── shots: Shot[]
 
-## 界面截图
+Episode
+├── title: string
+├── description: string
+├── keywords: string
+├── idea: string
+├── characters: Character[]
+└── shots: Shot[]
 
-| 项目列表 | 分集管理 |
-|:---:|:---:|
-| ![项目列表](images/demo/list.png) | ![分集管理](images/demo/分集管理.png) |
+Character
+├── name: string
+├── description: string
+├── visualHint: string
+├── scope: 'main' | 'guest'
+├── referenceImage: string?
+└── episodeId: string?
 
-| 剧本导入 | 导入 — 角色解析 | 导入 — 自动分集 |
-|:---:|:---:|:---:|
-| ![剧本导入](images/demo/剧本上传.png) | ![角色解析](images/demo/剧本上传-角色解析.png) | ![自动分集](images/demo/剧本上传-自动分集.png) |
+Shot
+├── sequence: number
+├── prompt: string
+├── startFrameDesc: string?
+├── endFrameDesc: string?
+├── firstFrame: string?
+├── lastFrame: string?
+├── sceneRefFrame: string?
+├── videoPrompt: string?
+├── videoUrl: string?
+├── referenceVideoUrl: string?
+├── status: 'pending' | 'generating' | 'completed' | 'failed'
+└── dialogues: Dialogue[]
 
-| 角色管理 | 剧本生成 |
-|:---:|:---:|
-| ![角色管理](images/demo/角色管理.png) | ![剧本生成](images/demo/剧本生成.png) |
+User
+├── email: string
+├── passwordHash: string
+└── createdAt: Date
 
-| 角色解析 | 分镜 | 分镜看板 |
-|:---:|:---:|:---:|
-| ![角色解析](images/demo/角色解析.png) | ![分镜](images/demo/分镜.png) | ![分镜看板](images/demo/分镜看板.png) |
-
-| 看板 | 看板详情 |
-|:---:|:---:|
-| ![看板](images/demo/看板.png) | ![看板详情](images/demo/看板详情.png) |
-
-| 预览 | 模型配置 |
-|:---:|:---:|
-| ![预览](images/demo/预览.png) | ![模型配置](images/demo/模型配置.png) |
+AdminSession
+├── token: string
+├── expiresAt: Date
+└── ipAddress: string?
+```
 
 ## License
 
 [Apache License 2.0](./LICENSE)
-
-
-
