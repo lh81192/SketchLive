@@ -5,7 +5,7 @@ import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
 import { projects } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 import { addImportLog, chunkText } from "@/lib/import-utils";
 import {
   IMPORT_CHARACTER_EXTRACT_SYSTEM,
@@ -26,7 +26,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
 
   const [project] = await db
     .select()

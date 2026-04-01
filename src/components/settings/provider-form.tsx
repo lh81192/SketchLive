@@ -58,6 +58,7 @@ export function ProviderForm({ provider }: ProviderFormProps) {
   const [modelSearch, setModelSearch] = useState("");
 
   const isKling = provider.protocol === "kling";
+  const isGemini = provider.protocol === "gemini";
 
   async function handleFetchModels() {
     setFetching(true);
@@ -121,7 +122,11 @@ export function ProviderForm({ provider }: ProviderFormProps) {
                   const isDefaultUrl = !provider.baseUrl || (Object.values(DEFAULT_BASE_URLS) as string[]).includes(provider.baseUrl);
                   updateProvider(provider.id, {
                     protocol: opt.value,
-                    ...(isDefaultUrl && { baseUrl: DEFAULT_BASE_URLS[opt.value] }),
+                    ...(opt.value === "gemini"
+                      ? { baseUrl: DEFAULT_BASE_URLS.gemini }
+                      : isDefaultUrl
+                        ? { baseUrl: DEFAULT_BASE_URLS[opt.value] }
+                        : {}),
                   });
                 }}
                 className={`rounded-lg border px-2.5 py-[7px] text-xs transition-all ${
@@ -193,6 +198,31 @@ export function ProviderForm({ provider }: ProviderFormProps) {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      ) : isGemini ? (
+        <div className="space-y-1.5">
+          <Label className="text-xs">API Key</Label>
+          <div className="relative">
+            <Input
+              type={showKey ? "text" : "password"}
+              value={provider.apiKey}
+              onChange={(e) =>
+                updateProvider(provider.id, {
+                  apiKey: e.target.value,
+                  baseUrl: DEFAULT_BASE_URLS.gemini,
+                })
+              }
+              placeholder="AIza..."
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(!showKey)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-lg text-[--text-muted] hover:text-[--text-primary]"
+            >
+              {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
           </div>
         </div>
       ) : (

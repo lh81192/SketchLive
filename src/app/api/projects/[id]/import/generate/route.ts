@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { projects, episodes, characters, episodeCharacters } from "@/lib/db/schema";
 import { eq, and, max } from "drizzle-orm";
 import { ulid } from "ulid";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 import { addImportLog } from "@/lib/import-utils";
 
 export const maxDuration = 60;
@@ -28,7 +28,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
 
   const [project] = await db
     .select()

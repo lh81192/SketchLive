@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, use } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Users, ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api-fetch";
 import { CharacterCard } from "@/components/editor/character-card";
 import Link from "next/link";
@@ -45,13 +45,36 @@ export default function CharactersPage({
       apiFetch(`/api/projects/${projectId}/characters`).then((r) => r.json()),
       apiFetch(`/api/projects/${projectId}/episodes`).then((r) => r.json()),
     ]);
-    setCharacters(chars);
-    setEpisodes(eps);
-    setLoading(false);
+    return {
+      chars: chars as Character[],
+      eps: eps as Episode[],
+    };
   }, [projectId]);
 
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await fetchData();
+        if (cancelled) return;
+        setCharacters(data.chars);
+        setEpisodes(data.eps);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchData]);
+
+  const reloadData = useCallback(async () => {
+    const data = await fetchData();
+    setCharacters(data.chars);
+    setEpisodes(data.eps);
+    setLoading(false);
   }, [fetchData]);
 
   const mainCharacters = useMemo(
@@ -90,7 +113,7 @@ export default function CharactersPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scope: "main" }),
     });
-    fetchData();
+    await reloadData();
   }
 
   async function handleDelete(characterId: string, name: string) {
@@ -99,7 +122,7 @@ export default function CharactersPage({
       method: "DELETE",
     });
     toast.success(tc("delete"));
-    fetchData();
+    await reloadData();
   }
 
   if (loading) {
@@ -161,7 +184,7 @@ export default function CharactersPage({
                 visualHint={char.visualHint}
                 referenceImage={char.referenceImage}
                 scope={char.scope}
-                onUpdate={fetchData}
+                onUpdate={reloadData}
                 onDelete={() => handleDelete(char.id, char.name)}
               />
             ))}
@@ -205,7 +228,7 @@ export default function CharactersPage({
                         referenceImage={char.referenceImage}
                         scope={char.scope}
                         episodeName={`EP.${String(ep.sequence).padStart(2, "0")} ${ep.title}`}
-                        onUpdate={fetchData}
+                        onUpdate={reloadData}
                         onPromote={() => handlePromote(char.id)}
                         onDelete={() => handleDelete(char.id, char.name)}
                       />

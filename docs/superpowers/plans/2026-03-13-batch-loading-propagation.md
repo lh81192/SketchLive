@@ -136,7 +136,7 @@ Replace the generate button JSX (lines 108-120) with:
 - [ ] **Step 6: Run TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit
 ```
 Expected: No errors.
 

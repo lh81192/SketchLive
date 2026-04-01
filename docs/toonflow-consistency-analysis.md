@@ -200,7 +200,7 @@ ${assets.map(a => `- ${a.name}：${a.intro}`).join("\n")}
 
 ## 八、与我们项目的对比与启示
 
-| 机制 | Toonflow | AIComicBuilder（现状） |
+| 机制 | Toonflow | SketchLive（现状） |
 |------|----------|-----------------------|
 | 角色参考图持久化 | ✅ 生成一次存 filePath | 需要评估 |
 | 参考图注入分镜生成 | ✅ 每次生成都注入 | 待实现 |

@@ -43,7 +43,7 @@ export default function ProjectLayout({
       <header className="sticky top-0 z-30 flex h-14 flex-shrink-0 items-center justify-between border-b border-[--border-subtle] bg-white/80 backdrop-blur-xl px-4 lg:px-6">
         <div className="flex items-center gap-3">
           <Link
-            href={`/${locale}`}
+            href={`/${locale}/app`}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-[--text-muted] transition-all hover:bg-[--surface] hover:text-[--text-primary]"
           >
             <ArrowLeft className="h-4 w-4" />

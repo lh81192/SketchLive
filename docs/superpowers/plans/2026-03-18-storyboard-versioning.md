@@ -112,7 +112,7 @@ Add to the `"entries"` array (after the `0006_add_video_script` entry):
 - [ ] **Step 4: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 Expected: no errors.
 
@@ -252,7 +252,7 @@ Note: `resolveAIProvider` (text-only) does NOT get `uploadDir` — it writes no 
 - [ ] **Step 4: TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 5: Commit**
@@ -356,7 +356,7 @@ With:
 - [ ] **Step 5: TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 6: Commit**
@@ -438,7 +438,7 @@ import { eq, and, asc, desc, lt, gt, max } from "drizzle-orm";
 - [ ] **Step 3: TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 4: Commit**
@@ -543,7 +543,7 @@ Same pattern: after fetching `shot`, get `versionedUploadDir`, pass to `resolveV
 - [ ] **Step 5: TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 6: Commit**
@@ -657,7 +657,7 @@ With:
 - [ ] **Step 5: TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 6: Commit**
@@ -726,7 +726,7 @@ To:
 - [ ] **Step 3: TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 4: Commit**
@@ -855,7 +855,7 @@ Check what existing navigation to preview looks like in `preview/page.tsx` or an
 - [ ] **Step 7: TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 8: Commit**
@@ -902,7 +902,7 @@ This re-fetches with the specific version when the URL contains `versionId`, ove
 - [ ] **Step 3: TypeScript check**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 4: Commit**

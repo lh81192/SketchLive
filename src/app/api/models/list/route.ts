@@ -11,8 +11,12 @@ interface ModelItem {
   name: string;
 }
 
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "").replace(/\/v\d[^/]*$/, "");
+}
+
 function buildModelsUrl(baseUrl: string): string {
-  let url = baseUrl.replace(/\/+$/, "");
+  const url = baseUrl.replace(/\/+$/, "");
   // If baseUrl already ends with /v1, don't duplicate
   if (url.endsWith("/v1")) {
     return url + "/models";
@@ -41,8 +45,8 @@ async function fetchModels(baseUrl: string, apiKey: string): Promise<ModelItem[]
 }
 
 async function fetchGeminiModels(baseUrl: string, apiKey: string): Promise<ModelItem[]> {
-  const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const url = `${normalizedBaseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}`;
   console.log("[models/list] Fetching Gemini:", url.replace(apiKey, "***"));
 
   const res = await fetch(url);

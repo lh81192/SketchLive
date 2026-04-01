@@ -1,4 +1,58 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  emailIdx: uniqueIndex("users_email_idx").on(table.email),
+}));
+
+export const userSessions = sqliteTable("user_sessions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+}, (table) => ({
+  userIdIdx: index("user_sessions_user_id_idx").on(table.userId),
+  expiresAtIdx: index("user_sessions_expires_at_idx").on(table.expiresAt),
+}));
+
+export const epubImports = sqliteTable("epub_imports", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  originalPath: text("original_path").notNull(),
+  status: text("status", {
+    enum: ["pending", "extracting", "ready", "failed"],
+  })
+    .notNull()
+    .default("pending"),
+  title: text("title"),
+  author: text("author"),
+  coverPath: text("cover_path"),
+  totalPages: integer("total_pages").notNull().default(0),
+  metadata: text("metadata", { mode: "json" }),
+  error: text("error"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
@@ -13,6 +67,10 @@ export const projects = sqliteTable("projects", {
     .default("draft"),
   finalVideoUrl: text("final_video_url"),
   generationMode: text('generation_mode', { enum: ['keyframe', 'reference'] }).notNull().default('keyframe'),
+  inputSource: text("input_source", { enum: ["script", "epub"] }).notNull().default("script"),
+  epubImportId: text("epub_import_id").references(() => epubImports.id, {
+    onDelete: "set null",
+  }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -107,6 +165,12 @@ export const shots = sqliteTable("shots", {
   referenceVideoUrl: text("reference_video_url"),
   lastFrameUrl: text("last_frame_url"),
   sceneRefFrame: text("scene_ref_frame"),
+  sourceType: text("source_type", { enum: ["manual", "epub_page"] })
+    .notNull()
+    .default("manual"),
+  sourcePageId: text("source_page_id").references(() => epubPages.id, {
+    onDelete: "set null",
+  }),
   videoScript: text("video_script"),
   videoPrompt: text("video_prompt"),
   episodeId: text("episode_id").references(() => episodes.id, {
@@ -120,6 +184,25 @@ export const shots = sqliteTable("shots", {
   })
     .notNull()
     .default("pending"),
+});
+
+export const epubPages = sqliteTable("epub_pages", {
+  id: text("id").primaryKey(),
+  importId: text("import_id")
+    .notNull()
+    .references(() => epubImports.id, { onDelete: "cascade" }),
+  pageNumber: integer("page_number").notNull(),
+  imagePath: text("image_path").notNull(),
+  thumbPath: text("thumb_path"),
+  width: integer("width"),
+  height: integer("height"),
+  sourceHref: text("source_href"),
+  sourceMediaType: text("source_media_type"),
+  isSelected: integer("is_selected", { mode: "boolean" }).notNull().default(true),
+  sortOrder: integer("sort_order").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
 });
 
 export const dialogues = sqliteTable("dialogues", {

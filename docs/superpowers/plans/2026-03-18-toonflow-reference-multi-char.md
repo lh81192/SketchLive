@@ -44,7 +44,7 @@ type ReferenceVideoParams = {
 - [ ] **Step 2: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && npx tsc --noEmit 2>&1 | head -30
+cd /Users/chenhao/codes/myself/SketchLive && npx tsc --noEmit 2>&1 | head -30
 ```
 
 Expected: no new errors.
@@ -104,7 +104,7 @@ private buildReferenceBody(
 - [ ] **Step 2: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && npx tsc --noEmit 2>&1 | head -30
+cd /Users/chenhao/codes/myself/SketchLive && npx tsc --noEmit 2>&1 | head -30
 ```
 
 Expected: no errors.
@@ -222,7 +222,7 @@ Replace the entire `else` block (the reference image mode section) with:
 - [ ] **Step 3: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && npx tsc --noEmit 2>&1 | head -30
+cd /Users/chenhao/codes/myself/SketchLive && npx tsc --noEmit 2>&1 | head -30
 ```
 
 Expected: no errors.
@@ -444,7 +444,7 @@ for (const shot of eligible) {
 - [ ] **Step 3: Verify TypeScript compiles with no errors**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && npx tsc --noEmit 2>&1 | head -30
+cd /Users/chenhao/codes/myself/SketchLive && npx tsc --noEmit 2>&1 | head -30
 ```
 
 Expected: no errors.

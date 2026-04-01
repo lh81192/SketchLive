@@ -153,7 +153,7 @@ export class VeoProvider implements VideoProvider {
 - [ ] **Step 2: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder
+cd /Users/chenhao/codes/myself/SketchLive
 pnpm tsc --noEmit 2>&1 | head -40
 ```
 

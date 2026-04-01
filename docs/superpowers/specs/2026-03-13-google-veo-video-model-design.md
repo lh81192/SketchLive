@@ -5,7 +5,7 @@
 
 ## Overview
 
-Integrate Google's Veo video generation models (via Gemini API) into AIComicBuilder as a new `VideoProvider`, reusing the existing `gemini` protocol. Users configure a Gemini provider with video capability and select a Veo model to generate shot videos from first/last frame pairs.
+Integrate Google's Veo video generation models (via Gemini API) into SketchLive as a new `VideoProvider`, reusing the existing `gemini` protocol. Users configure a Gemini provider with video capability and select a Veo model to generate shot videos from first/last frame pairs.
 
 ## Architecture
 

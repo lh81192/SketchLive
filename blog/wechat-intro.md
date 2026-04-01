@@ -1,24 +1,12 @@
-# 开源了！一个人用 AI 把剧本变成动画短片 — AI Comic Builder
+# SketchLive (绘活)
 
 > 从一段文字到一部完整动画，全程 AI 驱动，你只需要写（或让 AI 写）一个剧本。
 
 ---
 
-## 先看成品
-
-在介绍工具之前，先看两段完全由 AI Comic Builder 生成的动画短片：
-
-[《拳魂·最后一回合》- Seedance 2.0 生成](https://www.bilibili.com/video/BV1fVAuzLEAX/)
-
-[《拳魂·最后一回合》- Seedance 1.5 生成](https://www.bilibili.com/video/BV1WGAPzrEs1/)
-
-没有手绘，没有建模，没有 After Effects。**从剧本到成片，一个人，一个工具，全部搞定。**
-
----
-
 ## 这是什么？
 
-**AI Comic Builder** 是一个开源的 AI 漫剧生成器。它把"剧本 → 动画视频"这条原本需要编剧、分镜师、原画师、动画师协作的流水线，压缩成了一个 Web 应用里的四步工作流：
+**SketchLive (绘活)** 是一个开源的 AI 漫剧创作工具。它把"剧本 → 动画视频"这条原本需要编剧、分镜师、原画师、动画师协作的流水线，压缩成了一个 Web 应用里的四步工作流：
 
 ```
 剧本 → 角色 → 分镜 → 预览
@@ -90,7 +78,7 @@ AI 将剧本自动拆解为一个个专业镜头，每个镜头包含：
 
 ![模型配置](../images/demo/模型配置.png)
 
-AI Comic Builder 不绑定单一供应商，你可以自由搭配：
+SketchLive 不绑定单一供应商，你可以自由搭配：
 
 | 能力 | 可选模型 |
 |------|---------|
@@ -112,54 +100,4 @@ AI Comic Builder 不绑定单一供应商，你可以自由搭配：
 
 ---
 
-## 一分钟部署
-
-最简单的方式——Docker 一行命令：
-
-```bash
-docker run -d \
-  --name ai-comic-builder \
-  -p 3000:3000 \
-  -v ./data:/app/data \
-  -v ./uploads:/app/uploads \
-  twwch/aicomicbuilder:latest
-```
-
-启动后访问 `http://localhost:3000`，在设置页配置好 AI 模型的 API Key，就可以开始创作了。
-
----
-
-## 这个项目本身也是 AI 写的
-
-是的，AI Comic Builder 的代码本身也是全程由 AI 驱动开发的。整个开发过程记录在这里：
-
-https://github.com/twwch/vibe-coding
-
----
-
-## 链接
-
-- GitHub：https://github.com/twwch/AIComicBuilder
-- Demo 视频合集：https://www.bilibili.com/video/BV1fVAuzLEAX/
-
-欢迎 Star、Fork、提 Issue，也欢迎加入飞书群交流：
-
-| 飞书群 | 飞书群 2 |
-|:---:|:---:|
-| ![飞书群](../images/lark-chat.png) | ![飞书群2](../images/lark-chat2.png) |
-
----
-
-*AI Comic Builder — 让每个人都能做动画。*
-
----
-
-## 我的其他开源项目
-
-| 项目 | 简介 |
-|------|------|
-| [JadeAI](https://github.com/twwch/JadeAI) | AI 简历求职 |
-| [vibe-coding](https://github.com/twwch/vibe-coding) | Vibe Coding 思路 |
-| [DeepDiagram](https://github.com/twwch/DeepDiagram) | AI 绘图聚合 |
-| [next-chat-skills](https://github.com/twwch/next-chat-skills) | 对话式创建、调用、修改 Skill |
-| [OpenSkills](https://github.com/twwch/OpenSkills) | Python 调用 Skills 的 SDK |
+*SketchLive (绘活) — 让每个人都能做动画。*

@@ -9,8 +9,8 @@ import {
   storyboardVersions,
   episodeCharacters,
 } from "@/lib/db/schema";
-import { eq, asc, and, or, isNull, desc, inArray } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { eq, asc, and, desc, inArray } from "drizzle-orm";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 
 async function resolveProjectAndEpisode(
   projectId: string,
@@ -39,7 +39,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string; episodeId: string }> }
 ) {
   const { id, episodeId } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const { project, episode } = await resolveProjectAndEpisode(
     id,
     episodeId,
@@ -145,7 +147,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; episodeId: string }> }
 ) {
   const { id, episodeId } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const { project, episode } = await resolveProjectAndEpisode(
     id,
     episodeId,
@@ -191,7 +195,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; episodeId: string }> }
 ) {
   const { id, episodeId } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const { project, episode } = await resolveProjectAndEpisode(
     id,
     episodeId,

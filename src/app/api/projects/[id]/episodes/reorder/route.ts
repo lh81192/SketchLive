@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { projects, episodes } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 
 async function resolveProject(id: string, userId: string) {
   const [project] = await db
@@ -17,7 +17,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const project = await resolveProject(id, userId);
 
   if (!project) {

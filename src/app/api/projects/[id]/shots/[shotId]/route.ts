@@ -1,13 +1,30 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { shots } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { requireUserId } from "@/lib/get-user-id";
+import { resolveProjectOwnedByRequest } from "@/lib/project-auth";
+
+async function resolveShot(projectId: string, shotId: string) {
+  const [shot] = await db
+    .select()
+    .from(shots)
+    .where(and(eq(shots.id, shotId), eq(shots.projectId, projectId)));
+  return shot ?? null;
+}
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string; shotId: string }> }
 ) {
-  const { shotId } = await params;
+  const { id: projectId, shotId } = await params;
+  const { userId, project } = await resolveProjectOwnedByRequest(request, projectId);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
+  if (!project || !(await resolveShot(projectId, shotId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const body = (await request.json()) as Partial<{
     prompt: string;
     duration: number;
@@ -32,10 +49,17 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; shotId: string }> }
 ) {
-  const { shotId } = await params;
+  const { id: projectId, shotId } = await params;
+  const { userId, project } = await resolveProjectOwnedByRequest(request, projectId);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
+  if (!project || !(await resolveShot(projectId, shotId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   await db.delete(shots).where(eq(shots.id, shotId));
   return new NextResponse(null, { status: 204 });
 }

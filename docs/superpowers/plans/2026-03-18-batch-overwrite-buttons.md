@@ -124,7 +124,7 @@ const eligible = allShots.filter(
 - [ ] **Step 5: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 Expected: no errors.
 
@@ -199,7 +199,7 @@ Add after `batchGenerateReferenceVideos`:
 - [ ] **Step 5: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 
 - [ ] **Step 6: Commit**
@@ -506,7 +506,7 @@ Replace with:
 - [ ] **Step 7: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | grep -v node_modules
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | grep -v node_modules
 ```
 Expected: no errors.
 

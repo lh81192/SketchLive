@@ -226,7 +226,7 @@ interface VideoProvider {
 ## Project Structure
 
 ```
-AIComicBuilder/
+SketchLive/
 ├── src/
 │   ├── app/                      # Next.js App Router
 │   │   ├── (dashboard)/          # Project list / dashboard

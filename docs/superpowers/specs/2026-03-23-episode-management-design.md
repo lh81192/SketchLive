@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add episode (分集) management to AIComicBuilder. A project becomes a container for multiple episodes, each with its own script-to-video pipeline. Characters are managed at two scopes: project-level "main" characters (consistent across all episodes) and per-episode "guest" characters (auto-appended, promotable).
+Add episode (分集) management to SketchLive. A project becomes a container for multiple episodes, each with its own script-to-video pipeline. Characters are managed at two scopes: project-level "main" characters (consistent across all episodes) and per-episode "guest" characters (auto-appended, promotable).
 
 ## Data Model
 

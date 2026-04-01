@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, episodes, characters, shots, dialogues, storyboardVersions } from "@/lib/db/schema";
+import { projects, episodes, characters, shots, dialogues, storyboardVersions, epubImports, epubPages } from "@/lib/db/schema";
 import { eq, asc, and, desc } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 
 async function resolveProject(id: string, userId: string) {
   const [project] = await db
@@ -17,7 +17,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const project = await resolveProject(id, userId);
 
   if (!project) {
@@ -42,6 +44,21 @@ export async function GET(
     .select()
     .from(characters)
     .where(eq(characters.projectId, id));
+
+  const [projectImport] = project.epubImportId
+    ? await db
+        .select()
+        .from(epubImports)
+        .where(eq(epubImports.id, project.epubImportId))
+    : [];
+
+  const projectEpubPages = project.epubImportId
+    ? await db
+        .select()
+        .from(epubPages)
+        .where(eq(epubPages.importId, project.epubImportId))
+        .orderBy(asc(epubPages.sortOrder), asc(epubPages.pageNumber))
+    : [];
 
   const projectShots = resolvedVersionId
     ? await db
@@ -79,6 +96,8 @@ export async function GET(
 
   return NextResponse.json({
     ...project,
+    epubImport: projectImport ?? null,
+    epubPages: projectEpubPages,
     episodes: projectEpisodes,
     characters: projectCharacters,
     shots: enrichedShots,
@@ -96,7 +115,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const project = await resolveProject(id, userId);
 
   if (!project) {
@@ -134,7 +155,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const project = await resolveProject(id, userId);
 
   if (!project) {

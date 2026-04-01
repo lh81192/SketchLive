@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { projects, episodes, shots, characters, episodeCharacters } from "@/lib/db/schema";
 import { eq, asc, and, max, isNotNull, inArray } from "drizzle-orm";
 import { ulid } from "ulid";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 
 async function resolveProject(id: string, userId: string) {
   const [project] = await db
@@ -18,7 +18,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const project = await resolveProject(id, userId);
 
   if (!project) {
@@ -93,7 +95,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
   const project = await resolveProject(id, userId);
 
   if (!project) {

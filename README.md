@@ -1,20 +1,8 @@
-# AI Comic Builder
+# SketchLive (绘活)
 
 > v0.2.0
 
-AI 驱动的漫剧生成器 — 从剧本到动画视频的全自动流水线。
-
-📺 **系统介绍视频**：[Bilibili](https://www.bilibili.com/video/BV1gMQSBQEoi/)
-
-添加飞书群：
-
-| 飞书群 | 飞书群2 |
-|:---:|:---:|
-| ![飞书群](images/lark-chat.jpg) | ![飞书群2](images/lark-chat2.png) |
-
-本网站全程由 AI 驱动开发， 开发指南：https://github.com/twwch/vibe-coding
-
-
+绘活 — 从剧本到动画视频的全自动流水线。
 
 ## 功能特性
 
@@ -78,57 +66,6 @@ pnpm dev
 ```
 
 访问 [http://localhost:3000](http://localhost:3000)
-
-## Docker 部署
-
-### 快速启动
-
-```bash
-docker run -d \
-  --name ai-comic-builder \
-  -p 3000:3000 \
-  -v ./data:/app/data \
-  -v ./uploads:/app/uploads \
-  --platform linux/amd64 \
-  twwch/aicomicbuilder:latest
-```
-
-启动后在设置页面中配置 AI 模型供应商（OpenAI / Gemini / Seedance）。
-
-### Docker Compose
-
-创建 `docker-compose.yml`：
-
-```yaml
-services:
-  ai-comic-builder:
-    image: twwch/aicomicbuilder:latest
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
-    restart: unless-stopped
-```
-
-```bash
-docker compose up -d
-```
-
-### 数据持久化
-
-通过 volume 挂载保持数据：
-
-- `./data` — SQLite 数据库文件
-- `./uploads` — 上传的文件及生成的资源（图片、视频等）
-
-### 手动构建镜像
-
-```bash
-git clone https://github.com/twwch/AIComicBuilder.git
-cd AIComicBuilder
-docker build -t ai-comic-builder .
-```
 
 ## 生成流水线
 
@@ -207,25 +144,6 @@ src/
 | 预览 | 模型配置 |
 |:---:|:---:|
 | ![预览](images/demo/预览.png) | ![模型配置](images/demo/模型配置.png) |
-
-## Demo
-
-https://www.bilibili.com/video/BV19rwVzUEeD/
-
-https://www.bilibili.com/video/BV1RrwVzUE3x/
-
-https://www.bilibili.com/video/BV15rwVzSEKZ/
-
-https://www.bilibili.com/video/BV15kwiz7E6Q/
-
-https://www.bilibili.com/video/BV1hTw1zAEgY/
-
-最新版生成
-
-[《拳魂·最后一回合》-seedance1.5](https://www.bilibili.com/video/BV1WGAPzrEs1/)
-
-[《拳魂·最后一回合》-seedance2](https://www.bilibili.com/video/BV1fVAuzLEAX/)
-
 
 ## License
 

@@ -5,7 +5,7 @@ import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
 import { projects, episodes } from "@/lib/db/schema";
 import { eq, and, max } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 import { ulid } from "ulid";
 import {
   SCRIPT_SPLIT_SYSTEM,
@@ -90,7 +90,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
 
   // Verify project ownership
   const [project] = await db
@@ -151,7 +153,7 @@ export async function POST(
   const model = createLanguageModel(modelConfig.text);
 
   // Process all chunks concurrently
-  let episodeOffset = 0;
+  const episodeOffset = 0;
   const chunkPromises = chunks.map(async (chunk, idx) => {
     const prompt = buildScriptSplitPrompt(chunk, {
       chunkIndex: idx,

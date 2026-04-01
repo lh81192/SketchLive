@@ -51,7 +51,7 @@ generationMode: text('generation_mode').notNull().default('keyframe'),
 - [ ] **Step 4: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && npx tsc --noEmit 2>&1 | head -30
+cd /Users/chenhao/codes/myself/SketchLive && npx tsc --noEmit 2>&1 | head -30
 ```
 
 Expected: no errors related to `generationMode`.

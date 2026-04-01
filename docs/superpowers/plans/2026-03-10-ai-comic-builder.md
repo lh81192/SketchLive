@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16, TypeScript, Tailwind CSS 4, shadcn/ui, Zustand, Drizzle ORM, SQLite, next-intl, fluent-ffmpeg, OpenAI SDK, Google AI SDK
 
-**Spec:** `docs/superpowers/specs/2026-03-10-ai-comic-builder-design.md`
+**Spec:** `docs/superpowers/specs/2026-03-10-sketch-live-design.md`
 
 ---
 
@@ -24,7 +24,7 @@
 - [ ] **Step 1: Initialize Next.js 16 project**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder
+cd /Users/chenhao/codes/myself/SketchLive
 pnpm create next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --turbopack
 ```
 
@@ -33,7 +33,7 @@ Select defaults: Yes to all prompts. This creates the base Next.js 16 project wi
 - [ ] **Step 2: Verify the project runs**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder
+cd /Users/chenhao/codes/myself/SketchLive
 pnpm dev
 ```
 
@@ -41,7 +41,7 @@ Expected: Dev server starts on http://localhost:3000, default Next.js page rende
 
 - [ ] **Step 3: Create `.env.example`**
 
-Create `/Users/chenhao/codes/myself/AIComicBuilder/.env.example`:
+Create `/Users/chenhao/codes/myself/SketchLive/.env.example`:
 
 ```env
 # AI Providers
@@ -88,7 +88,7 @@ mkdir -p uploads/characters uploads/frames uploads/videos data
 - [ ] **Step 6: Initialize git and commit**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder
+cd /Users/chenhao/codes/myself/SketchLive
 git init
 git add -A
 git commit -m "chore: scaffold Next.js 16 project with Tailwind CSS"
@@ -3660,7 +3660,7 @@ git commit -m "feat: add preview page with video assembly"
 - [ ] **Step 1: Run the full build**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder
+cd /Users/chenhao/codes/myself/SketchLive
 pnpm build
 ```
 

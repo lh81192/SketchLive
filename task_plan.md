@@ -1,71 +1,48 @@
-# 分镜页面重设计 Task Plan
+# EPUB MVP Task Plan
 
 ## Goal
-将分镜页面从「步骤 tab 切换」模式改造为「竖向流水线卡片 + 批量操作面板 + 版本控制」模式。
-**核心约束：只改 UI 交互，所有生成逻辑/API 调用/提示词不改。**
+完成 EPUB 导入 MVP 前端与下游入口：在 `/project/[id]/import` 按 `inputSource` 分流，打通 EPUB 上传、页面选择/排序、手动角色录入、导入 storyboard，并让 project-level storyboard / preview 可用于 EPUB 项目。
 
-## Files to Modify
-- `src/app/[locale]/project/[id]/storyboard/page.tsx` — 页面主体
-- `src/components/editor/shot-card.tsx` — 分镜卡片（重构）
+## Active Files
+- `src/app/[locale]/project/[id]/import/page.tsx`
+- `src/app/[locale]/project/[id]/storyboard/page.tsx`
+- `src/app/[locale]/project/[id]/preview/page.tsx`
+- `src/app/[locale]/project/[id]/episodes/[episodeId]/storyboard/page.tsx`
+- `src/app/[locale]/project/[id]/episodes/[episodeId]/preview/page.tsx`
+- `messages/zh.json`
+- `messages/en.json`
+- `messages/ja.json`
+- `messages/ko.json`
 
 ## Phases
 
-### P0-A: 竖向流水线 ShotCard [ ] in_progress
-重构 ShotCard，移除 activeStep 依赖，改为卡片内部展示完整四步流水线。
+### P1: EPUB import UI branch [in_progress]
+- 在 import 页基于 `project.inputSource` 分流
+- 保留原脚本文本导入流程
+- 新增 EPUB 上传、页面网格、选择/排序、手动角色表单、导入 storyboard 按钮
 
-**设计：**
-- 头部（始终可见）：序号 + 缩略图预览 + 场景摘要 + 时长 + 整体进度点
-- 步骤区（始终可见，可折叠）：
-  - Step 1「文本」：显示场景描述摘要，[重新生成] 按钮
-  - Step 2「帧」：显示首/尾帧缩略图（keyframe）或参考帧（reference），[生成帧] 按钮
-  - Step 3「视频提示词」：显示提示词摘要，[重新生成提示词] 按钮
-  - Step 4「视频」：显示视频缩略图或未生成状态，[生成视频] 按钮（下一步高亮）
-- 每步状态：✓(绿) / ○(灰) / ⟳(动画) / ✗(红)
-- 底部：完整文本编辑区（可折叠展开）
+### P2: Project-level storyboard / preview entry [pending]
+- 让 `/project/[id]/storyboard` 与 `/project/[id]/preview` 可直接用于 project-level shots
+- 复用现有 episode storyboard / preview 组件
 
-**Props 变更：**
-- 移除 `activeStep`
-- 移除 `batchGenerating*` 系列（批量状态改用 status 字段反映）
-- 新增 `videoRatio` prop（从 page 传下来，统一控制）
+### P3: Downstream compatibility fixes [pending]
+- 修正 version 切换与 preview / assemble 在 `currentEpisodeId` 为空时的行为
+- 确保 project-level EPUB shots 不会错误跳回 episode-only 路径
 
-### P0-B: 页面批量操作面板 [ ]
-重构 storyboard/page.tsx 顶部控制区。
+### P4: Validation [complete]
+- 运行 lint 或至少进行 TypeScript/route-level smoke verification
+- 检查新增文案和导入跳转链路
+- 修复 EPUB 相关页面与共享页面上的 hooks / image lint
+- 已完成 targeted ESLint 验证
 
-**设计：**
-- 版本栏（tabs）：V1 / V2 / ... / [+ 新建版本]
-- 批量操作卡片（始终展开，不再是 step-conditional）：
-  - 行1：[① 批量生成文本]（text model picker）
-  - 行2：[② 批量生成帧]（image model picker）+ [覆盖]
-  - 行3：[③ 批量生成视频提示词]（text model picker）
-  - 行4：[④ 批量生成视频]（video model picker + ratio picker）+ [覆盖]
-  - 分隔线
-  - [▶ 一键续跑] — 扫描缺失步骤，弹确认框后执行
-- 移除 WorkflowStep 步骤指示器（状态直接在卡片上显示）
-- 保留 GenerationModeTab 和下载按钮
-
-### P0-C: 一键续跑逻辑 [ ]
-在 page.tsx 中实现 handleAutoRun：
-1. 扫描当前版本所有 shots，统计缺失步骤
-2. 弹出确认 toast/dialog（显示预计执行项目）
-3. 按顺序执行：缺文本→批量文本，缺帧→批量帧，缺提示词→批量提示词，缺视频→批量视频
-
-### P1: 版本新建对话框 [ ]
-点击「+ 新建版本」时显示 Dialog：
-- 版本名称 input
-- 基于：[当前版本复制] / [从头开始]
-- 复制内容 checkboxes：文本、图片帧、视频提示词、视频
-- [创建] 调用 shot_split action（与现有逻辑一致）
-
-### P2: 版本对比（defer）[ ]
-双栏对比模式，暂不实现。
+## Decisions
+- 不新建 EPUB UI 组件文件，先在现有 import page 内完成分流，减少改动面。
+- project-level storyboard / preview 直接复用现有 episode 页面逻辑，避免重复实现生成面板。
+- 通过 `currentEpisodeId ?? undefined` 统一 project-level / episode-level fetch 行为。
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| — | — | — |
-
-## Decisions
-- `activeStep` prop 从 ShotCard 移除，由卡片自己根据数据状态判断「下一步」
-- 批量操作的 model picker 保留在 page 级别（不下沉到卡片）
-- videoRatio 在 page 保持全局状态，通过 prop 传给每张卡片的视频生成按钮
-- 版本 tab 切换沿用现有 fetchProject(id, versionId) 机制
+| 旧的 `task_plan.md` / `progress.md` 是上一个 unrelated UI 任务 | 1 | 用当前 EPUB 任务内容覆盖，避免 planning hook 持续注入过期上下文 |
+| Agent worktree 无法创建（此前会话） | 1 | 本轮继续直接用 Read/Edit/Write 完成实现 |
+| `next dev` 启动时 DB migration 报 `The supplied SQL string contains more than one statement` | 1 | 待修复 `src/lib/db/index.ts` 的 SQLite migration 执行方式后继续 smoke test |

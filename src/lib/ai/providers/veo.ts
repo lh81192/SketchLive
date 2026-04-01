@@ -5,6 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { ulid } from "ulid";
 
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "").replace(/\/v\d[^/]*$/, "");
+}
+
 const VALID_DURATIONS = [4, 6, 8] as const;
 
 function clampDuration(duration: number): number {
@@ -28,47 +32,116 @@ function readImageData(filePath: string): { imageBytes: string; mimeType: string
   return { imageBytes, mimeType };
 }
 
+function modelSupportsLastFrame(modelId: string): boolean {
+  const normalized = modelId.toLowerCase();
+  return normalized.includes("veo-2") || normalized.includes("veo 2");
+}
+
+function buildVideoRequest(params: VideoGenerateParams, modelId: string, durationSeconds: number, aspectRatio: "16:9" | "9:16") {
+  const supportsLastFrame = modelSupportsLastFrame(modelId);
+
+  if ("firstFrame" in params) {
+    const firstFrameData = readImageData(params.firstFrame);
+    const request: {
+      image: { imageBytes: string; mimeType: string };
+      config: {
+        durationSeconds: number;
+        aspectRatio: "16:9" | "9:16";
+        lastFrame?: { imageBytes: string; mimeType: string };
+      };
+    } = {
+      image: firstFrameData,
+      config: {
+        durationSeconds,
+        aspectRatio,
+      },
+    };
+
+    if (supportsLastFrame) {
+      request.config.lastFrame = readImageData(params.lastFrame);
+    }
+
+    return request;
+  }
+
+  return {
+    image: readImageData(params.initialImage),
+    config: {
+      durationSeconds,
+      aspectRatio,
+    },
+  };
+}
+
+function getModeLabel(params: VideoGenerateParams, modelId: string): string {
+  if ("firstFrame" in params) {
+    return modelSupportsLastFrame(modelId) ? "keyframe+lastFrame" : "keyframe";
+  }
+  return "reference";
+}
+
+function ensureSupportedMode(params: VideoGenerateParams) {
+  if ("firstFrame" in params || "initialImage" in params) {
+    return;
+  }
+  throw new Error("Veo provider requires either firstFrame/lastFrame or initialImage");
+}
+
 export class VeoProvider implements VideoProvider {
   private client: GoogleGenAI;
   private model: string;
   private uploadDir: string;
 
   constructor(params?: { apiKey?: string; baseUrl?: string; model?: string; uploadDir?: string }) {
+    const apiKey = params?.apiKey || process.env.GEMINI_API_KEY || "";
+    const baseUrl = params?.baseUrl ? normalizeBaseUrl(params.baseUrl) : undefined;
+
     const options: ConstructorParameters<typeof GoogleGenAI>[0] = {
-      apiKey: params?.apiKey || process.env.GEMINI_API_KEY || "",
+      apiKey,
+      ...(baseUrl ? { httpOptions: { baseUrl } } : {}),
     };
-    if (params?.baseUrl) {
-      const baseUrl = params.baseUrl.replace(/\/+$/, "").replace(/\/v\d[^/]*$/, "");
-      options.httpOptions = { baseUrl };
-    }
+
     this.client = new GoogleGenAI(options);
     this.model = params?.model || "veo-2.0-generate-001";
     this.uploadDir = params?.uploadDir || process.env.UPLOAD_DIR || "./uploads";
   }
 
-  async generateVideo(params: VideoGenerateParams): Promise<VideoGenerateResult> {
-    if (!("firstFrame" in params)) {
-      throw new Error("Veo provider only supports keyframe (image2video) mode");
+  private getModelId(): string {
+    return this.model;
+  }
+
+  private ensureOperationName(operation: Awaited<ReturnType<GoogleGenAI["models"]["generateVideos"]>>): void {
+    if (!operation.name) {
+      throw new Error("Veo did not return an operation name");
     }
+  }
+
+  async generateVideo(params: VideoGenerateParams): Promise<VideoGenerateResult> {
+    ensureSupportedMode(params);
     const durationSeconds = clampDuration(params.duration);
     const aspectRatio = toAspectRatio(params.ratio);
-    const firstFrameData = readImageData(params.firstFrame!);
-    const lastFrameData = readImageData(params.lastFrame!);
+    const modelId = this.getModelId();
+    const request = buildVideoRequest(params, modelId, durationSeconds, aspectRatio);
 
     console.log(
-      `[Veo] Submitting task: model=${this.model}, duration=${durationSeconds}s, ratio=${aspectRatio}`
+      `[Veo] Submitting task: model=${this.model}, mode=${getModeLabel(params, modelId)}, duration=${durationSeconds}s, ratio=${aspectRatio}`
     );
 
     let operation = await this.client.models.generateVideos({
-      model: this.model,
+      model: modelId,
       prompt: params.prompt,
-      image: firstFrameData,
-      config: {
-        lastFrame: lastFrameData,
-        durationSeconds,
-        aspectRatio,
-      },
+      ...request,
     });
+    this.ensureOperationName(operation);
+
+    if ("firstFrame" in params && !modelSupportsLastFrame(modelId)) {
+      console.log(`[Veo] Model ${this.model} does not support lastFrame, falling back to first-frame-only image2video`);
+    }
+
+    if ("initialImage" in params) {
+      console.log(`[Veo] Model ${this.model} uses initialImage-only image2video request`);
+    }
+
 
     operation = await this.pollForResult(operation);
 
@@ -115,7 +188,9 @@ export class VeoProvider implements VideoProvider {
       }
 
       await new Promise((resolve) => setTimeout(resolve, 10_000));
-      operation = await this.client.operations.getVideosOperation({ operation });
+      operation = await this.client.operations.getVideosOperation({
+        operation,
+      });
     }
 
     throw new Error("Veo generation timed out after 10 minutes");

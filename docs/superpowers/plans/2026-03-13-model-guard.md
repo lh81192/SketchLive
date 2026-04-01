@@ -22,7 +22,7 @@
 - [ ] **Step 1: Install sonner**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm add sonner
+cd /Users/chenhao/codes/myself/SketchLive && pnpm add sonner
 ```
 
 Expected: sonner added to `dependencies` in `package.json`.
@@ -221,7 +221,7 @@ export function useModelGuard(capability: Capability): () => boolean {
 - [ ] **Step 2: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit
 ```
 
 Expected: No TypeScript errors.

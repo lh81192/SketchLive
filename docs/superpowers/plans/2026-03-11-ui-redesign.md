@@ -1,4 +1,4 @@
-# AIComicBuilder UI Redesign Implementation Plan
+# SketchLive UI Redesign Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -143,7 +143,7 @@ Replace the entire file. The new theme uses hex values for the dark cinema palet
 
 - [ ] **Step 2: Verify the app compiles**
 
-Run: `cd /Users/chenhao/codes/myself/AIComicBuilder && npx next build 2>&1 | head -20`
+Run: `cd /Users/chenhao/codes/myself/SketchLive && npx next build 2>&1 | head -20`
 Expected: Build starts without CSS errors
 
 - [ ] **Step 3: Commit**
@@ -230,7 +230,7 @@ export default async function LocaleLayout({
 
 - [ ] **Step 3: Verify build**
 
-Run: `cd /Users/chenhao/codes/myself/AIComicBuilder && npx next build 2>&1 | head -20`
+Run: `cd /Users/chenhao/codes/myself/SketchLive && npx next build 2>&1 | head -20`
 
 - [ ] **Step 4: Commit**
 
@@ -1774,12 +1774,12 @@ The script page is a simple wrapper that renders `<ScriptEditor />`. No changes 
 
 - [ ] **Step 1: Verify all pages build successfully**
 
-Run: `cd /Users/chenhao/codes/myself/AIComicBuilder && npx next build 2>&1 | tail -30`
+Run: `cd /Users/chenhao/codes/myself/SketchLive && npx next build 2>&1 | tail -30`
 Expected: Build succeeds with no errors
 
 - [ ] **Step 2: Start dev server and visually verify**
 
-Run: `cd /Users/chenhao/codes/myself/AIComicBuilder && npx next dev`
+Run: `cd /Users/chenhao/codes/myself/SketchLive && npx next dev`
 Expected: Dark cinema theme visible on all pages
 
 - [ ] **Step 3: Final commit for any remaining fixes**

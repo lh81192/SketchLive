@@ -1,4 +1,4 @@
-# AIComicBuilder UI Redesign - Design Spec
+# SketchLive UI Redesign - Design Spec
 
 **Date:** 2026-03-11
 **Style:** Modern Dark Cinema ("暗影影院")

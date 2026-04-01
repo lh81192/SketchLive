@@ -4,8 +4,8 @@ import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
 import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters } from "@/lib/db/schema";
-import { eq, asc, and, lt, gt, desc, or, isNull, inArray } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { eq, asc, and, lt, gt, desc, inArray } from "drizzle-orm";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 import path from "path";
 import { ulid } from "ulid";
 import { enqueueTask } from "@/lib/task-queue";
@@ -110,7 +110,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
 
   // Verify project ownership
   const [ownerCheck] = await db
@@ -581,6 +583,14 @@ async function handleShotSplitStream(
     );
   }
 
+  const fullScript = script?.trim() ?? "";
+  if (!fullScript) {
+    return NextResponse.json(
+      { error: "No screenplay found for shot generation" },
+      { status: 400 }
+    );
+  }
+
   // Fetch only characters linked to this episode
   let shotCharacters: typeof characters.$inferSelect[];
   if (episodeId) {
@@ -603,13 +613,23 @@ async function handleShotSplitStream(
     .filter((c) => c.visualHint)
     .map((c) => ({ name: c.name, visualHint: c.visualHint! }));
 
-  const model = createLanguageModel(modelConfig.text);
+  let model;
+  try {
+    model = createLanguageModel(modelConfig.text);
+  } catch (err) {
+    return NextResponse.json(
+      { error: extractErrorMessage(err) },
+      { status: 400 }
+    );
+  }
+
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
   const systemPrompt = buildShotSplitSystem(videoMaxDuration);
-  const jsonMode = { openai: { response_format: { type: "json_object" } } };
+  const providerOptions = modelConfig.text.protocol === "openai"
+    ? { openai: { response_format: { type: "json_object" } } }
+    : undefined;
 
   // Split screenplay into chunks by SCENE markers (~8 scenes per chunk)
-  const fullScript = script || "";
   const sceneChunks = splitScriptByScenes(fullScript, 8);
   // Log scene detection details
   const sceneRe = /^[\s*#]*(?:SCENE|场景)\s*\d+/i;
@@ -632,6 +652,11 @@ async function handleShotSplitStream(
     cameraDirection?: string;
   };
 
+  type ChunkResult = {
+    shots: ParsedShot[];
+    error?: string;
+  };
+
   // Process chunks concurrently
   const chunkResults = await Promise.all(
     sceneChunks.map(async (chunk, idx) => {
@@ -641,26 +666,42 @@ async function handleShotSplitStream(
           model,
           system: systemPrompt,
           prompt,
-          providerOptions: jsonMode,
+          ...(providerOptions ? { providerOptions } : {}),
         });
-        const parsed = JSON.parse(extractJSON(result.text));
+        const rawText = extractJSON(result.text);
+        const parsed = JSON.parse(rawText);
         // Handle both array and {shots:[]} formats
-        const shots = Array.isArray(parsed) ? parsed : (parsed.shots || []);
+        const shots = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.shots) ? parsed.shots : []);
+
+        if (shots.length === 0) {
+          const error = "Model returned no shots";
+          console.error(`[ShotSplit] Chunk ${idx + 1} returned empty shots`, {
+            protocol: modelConfig.text?.protocol,
+            modelId: modelConfig.text?.modelId,
+            rawText: rawText.slice(0, 2000),
+          });
+          return { shots: [], error } satisfies ChunkResult;
+        }
+
         console.log(`[ShotSplit] Chunk ${idx + 1}/${sceneChunks.length}: ${shots.length} shots`);
-        return shots as ParsedShot[];
+        return { shots: shots as ParsedShot[] } satisfies ChunkResult;
       } catch (err) {
-        console.error(`[ShotSplit] Chunk ${idx + 1} failed:`, err);
-        return [] as ParsedShot[];
+        const error = err instanceof SyntaxError
+          ? "Model returned invalid JSON for shot generation"
+          : extractErrorMessage(err);
+        console.error(`[ShotSplit] Chunk ${idx + 1} failed: ${error}`, err);
+        return { shots: [], error } satisfies ChunkResult;
       }
     })
   );
 
   // Merge and re-sequence
-  const allShots = chunkResults.flat();
+  const allShots = chunkResults.flatMap((result) => result.shots);
   allShots.forEach((s, i) => { s.sequence = i + 1; });
 
   if (allShots.length === 0) {
-    return NextResponse.json({ error: "Failed to generate shots" }, { status: 500 });
+    const firstError = chunkResults.find((result) => result.error)?.error ?? "Failed to generate shots";
+    return NextResponse.json({ error: firstError }, { status: 500 });
   }
 
   // Create version record

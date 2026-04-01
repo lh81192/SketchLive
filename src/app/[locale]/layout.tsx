@@ -57,7 +57,7 @@ export default async function LocaleLayout({
           <FingerprintProvider>
             <ThemeProvider>{children}</ThemeProvider>
           </FingerprintProvider>
-          <Toaster position="top-center" theme="light" />
+          <Toaster position="top-center" />
         </NextIntlClientProvider>
       </body>
     </html>

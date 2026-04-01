@@ -88,7 +88,7 @@ Replace the final `persist` options object `{ name: "model-store" }` with:
 - [ ] **Step 1.5: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && npm run build 2>&1 | head -60
+cd /Users/chenhao/codes/myself/SketchLive && npm run build 2>&1 | head -60
 ```
 
 Expected: compile errors in `provider-form.tsx`, `settings/page.tsx`, `default-model-picker.tsx`, and `model-selector.tsx` (all referencing old `capabilities` field) — these are expected and will be fixed in later tasks. The store itself should have no errors.

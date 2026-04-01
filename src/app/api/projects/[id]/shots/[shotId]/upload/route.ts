@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { shots } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { requireUserId } from "@/lib/get-user-id";
+import { resolveProjectOwnedByRequest } from "@/lib/project-auth";
 import fs from "node:fs";
+
+async function resolveShot(projectId: string, shotId: string) {
+  const [shot] = await db
+    .select()
+    .from(shots)
+    .where(and(eq(shots.id, shotId), eq(shots.projectId, projectId)));
+  return shot ?? null;
+}
 import path from "node:path";
 import { ulid } from "ulid";
 
@@ -15,7 +25,14 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; shotId: string }> }
 ) {
-  const { shotId } = await params;
+  const { id: projectId, shotId } = await params;
+  const { userId, project } = await resolveProjectOwnedByRequest(request, projectId);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
+  if (!project || !(await resolveShot(projectId, shotId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const field = formData.get("field") as string | null;

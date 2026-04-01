@@ -47,7 +47,7 @@ videoScript: text("video_script"),
 - [ ] **Step 4: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | head -20
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | head -20
 ```
 Expected: no errors related to schema.
 
@@ -97,7 +97,7 @@ After the `=== motionScript requirements ===` section (after line ~53), add a ne
 - [ ] **Step 3: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | head -20
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | head -20
 ```
 
 - [ ] **Step 4: Commit**
@@ -165,7 +165,7 @@ export function buildVideoPrompt(params: {
 - [ ] **Step 2: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | head -20
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | head -20
 ```
 Expected: no errors. The old `motionScript` param is removed; existing call sites will fail type-check — that is expected and will be fixed in Task 4.
 
@@ -362,7 +362,7 @@ await db
 - [ ] **Step 6: Verify TypeScript compiles**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1 | head -30
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1 | head -30
 ```
 
 - [ ] **Step 7: Commit**
@@ -505,7 +505,7 @@ const videoPrompt = buildVideoPrompt({
 - [ ] **Step 5: Verify TypeScript compiles cleanly**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm tsc --noEmit 2>&1
+cd /Users/chenhao/codes/myself/SketchLive && pnpm tsc --noEmit 2>&1
 ```
 Expected: no errors.
 
@@ -523,7 +523,7 @@ git commit -m "feat: use videoScript with frame anchors in all video generation 
 - [ ] **Step 1: Start the dev server**
 
 ```bash
-cd /Users/chenhao/codes/myself/AIComicBuilder && pnpm dev
+cd /Users/chenhao/codes/myself/SketchLive && pnpm dev
 ```
 
 - [ ] **Step 2: Verify migration ran**

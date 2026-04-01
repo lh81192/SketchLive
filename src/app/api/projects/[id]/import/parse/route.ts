@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { projects } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { getUserIdFromRequest, requireUserId } from "@/lib/get-user-id";
 import { addImportLog, extractTextFromFile } from "@/lib/import-utils";
 
 export const maxDuration = 60;
@@ -12,7 +12,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-  const userId = getUserIdFromRequest(request);
+  const userId = await getUserIdFromRequest(request);
+  const unauthorized = requireUserId(userId);
+  if (unauthorized) return unauthorized;
 
   const [project] = await db
     .select()
@@ -43,6 +45,7 @@ export async function POST(
 
     await addImportLog(projectId, 1, "done", `解析完成，共 ${text.length} 字`, {
       charCount: text.length,
+      text,
     });
 
     return NextResponse.json({ text, charCount: text.length });

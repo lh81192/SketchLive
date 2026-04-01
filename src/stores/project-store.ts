@@ -1,5 +1,18 @@
 import { create } from "zustand";
-import { apiFetch } from "@/lib/api-fetch";
+import { apiFetch, handleApiProjectAccessError } from "@/lib/api-fetch";
+import { routing } from "@/i18n/routing";
+
+function getLocaleFromPathname(): string {
+  if (typeof window === "undefined") return routing.defaultLocale;
+  const locale = window.location.pathname.split("/")[1];
+  return routing.locales.includes(locale as (typeof routing.locales)[number])
+    ? locale
+    : routing.defaultLocale;
+}
+
+function handleProjectAccessError(error: unknown): never {
+  handleApiProjectAccessError(error, getLocaleFromPathname());
+}
 
 interface Character {
   id: string;
@@ -17,6 +30,29 @@ interface Dialogue {
   characterId: string;
   characterName: string;
   sequence: number;
+}
+
+interface EpubImport {
+  id: string;
+  fileName: string;
+  status: "pending" | "extracting" | "ready" | "failed";
+  title: string | null;
+  author: string | null;
+  coverPath: string | null;
+  totalPages: number;
+}
+
+interface EpubPage {
+  id: string;
+  pageNumber: number;
+  imagePath: string;
+  thumbPath: string | null;
+  width: number | null;
+  height: number | null;
+  sourceHref: string | null;
+  sourceMediaType: string | null;
+  isSelected: boolean;
+  sortOrder: number;
 }
 
 interface Shot {
@@ -55,6 +91,10 @@ interface Project {
   status: string;
   finalVideoUrl: string | null;
   generationMode: "keyframe" | "reference";
+  inputSource: "script" | "epub";
+  epubImportId: string | null;
+  epubImport?: EpubImport | null;
+  epubPages?: EpubPage[];
   characters: Character[];
   shots: Shot[];
   versions: StoryboardVersion[];
@@ -76,20 +116,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   currentEpisodeId: null,
 
   fetchProject: async (id: string, episodeId?: string, versionId?: string) => {
-    // Only show loading spinner on initial load (no project yet).
-    // Version switches are background refreshes — don't unmount children.
     if (!get().project) set({ loading: true });
 
-    let url: string;
-    if (episodeId) {
-      url = `/api/projects/${id}/episodes/${episodeId}${versionId ? `?versionId=${versionId}` : ""}`;
-    } else {
-      url = `/api/projects/${id}${versionId ? `?versionId=${versionId}` : ""}`;
-    }
+    try {
+      const url = episodeId
+        ? `/api/projects/${id}/episodes/${episodeId}${versionId ? `?versionId=${versionId}` : ""}`
+        : `/api/projects/${id}${versionId ? `?versionId=${versionId}` : ""}`;
 
-    const res = await apiFetch(url);
-    const data = await res.json();
-    set({ project: data, loading: false, currentEpisodeId: episodeId ?? null });
+      const res = await apiFetch(url);
+      const data = await res.json();
+      set({ project: data, loading: false, currentEpisodeId: episodeId ?? null });
+    } catch (error) {
+      set({ loading: false });
+      handleProjectAccessError(error);
+    }
   },
 
   updateIdea: (idea: string) => {
